@@ -1,0 +1,1160 @@
+from datetime import date
+from decimal import Decimal
+
+from django.contrib import admin, messages
+from django import forms
+from django.core.exceptions import ValidationError
+from django.db.models import Sum
+from django.forms.models import BaseInlineFormSet
+from django.utils import timezone
+from django.utils.html import format_html
+
+from .services import (
+    rebuild_villa_financial_summaries,
+    rebuild_department_financial_summaries,
+    get_monthly_program_revenue,
+    get_next_month,
+    money,
+)
+
+from .models import (
+    Customer,
+    CustomerPayment,
+    House,
+    VillaProgram,
+    Department,
+    ServiceCategory,
+    VillaServicePrice,
+    Employee,
+    WorkEntry,
+    Invoice,
+    DepartmentCost,
+    Supplier,
+    SupplierPayment,
+    VillaFinancialSummary,
+    DepartmentFinancialSummary,
+    HouseInfo,
+    HouseTechnician,
+    HouseWaterReading,
+    HouseWaterTank,
+    HouseWaterTankReading,
+    HouseWaterDelivery,
+    HouseWaterSourcePeriod,
+    HouseWaterTariff,
+    HouseWaterBill,
+    HouseElectricityBill,
+)
+
+
+# ==================================================
+# CUSTOMER PAYMENTS
+# ==================================================
+
+@admin.register(CustomerPayment)
+class CustomerPaymentAdmin(admin.ModelAdmin):
+    list_display = (
+        "customer",
+        "payment_date",
+        "amount",
+        "reference",
+    )
+
+    list_filter = (
+        "customer",
+        "payment_date",
+    )
+
+    search_fields = (
+        "customer__name",
+        "reference",
+        "notes",
+    )
+
+    autocomplete_fields = ("customer",)
+
+    ordering = ("-payment_date", "-id")
+
+
+# ==================================================
+# SUPPLIERS
+# ==================================================
+
+@admin.register(Supplier)
+class SupplierAdmin(admin.ModelAdmin):
+    list_display = (
+        "name",
+        "tax_number",
+        "phone",
+        "email",
+    )
+
+    search_fields = (
+        "name",
+        "tax_number",
+        "email",
+    )
+
+    ordering = ("name",)
+
+
+# ==================================================
+# VILLA PROGRAM INLINE
+# ==================================================
+
+class VillaProgramInline(admin.TabularInline):
+    model = VillaProgram
+    extra = 1
+
+    fields = (
+        "program_type",
+        "price",
+        "start_date",
+        "end_date",
+    )
+
+
+# ==================================================
+# CUSTOMER ADMIN + CUSTOMER BILLING CARD
+# ==================================================
+
+@admin.register(Customer)
+class CustomerAdmin(admin.ModelAdmin):
+
+    list_display = (
+        "name",
+        "company_name",
+        "email",
+        "phone",
+        "billing_balance",
+    )
+
+    search_fields = (
+        "name",
+        "company_name",
+        "email",
+        "phone",
+    )
+
+    readonly_fields = (
+        "customer_billing_card",
+    )
+
+    fieldsets = (
+        (
+            "Customer information",
+            {
+                "fields": (
+                    "name",
+                    "company_name",
+                    "email",
+                    "phone",
+                    "address",
+                    "tax_number",
+                    "notes",
+                )
+            },
+        ),
+        (
+            "Customer Billing Card",
+            {
+                "fields": (
+                    "customer_billing_card",
+                ),
+            },
+        ),
+    )
+
+    def get_billing_totals(self, customer):
+        """
+        Calculate the customer's outstanding balance
+        from the existing source records.
+
+        Charges:
+        - WorkEntry.customer_charge
+        - VillaProgram monthly price
+        - Villa-assigned supplier invoices
+
+        Credits:
+        - CustomerPayment.amount
+
+        All amounts are calculated through today.
+        """
+
+        today = timezone.localdate()
+
+        houses = list(customer.villas.all())
+
+        house_ids = [
+            house.pk
+            for house in houses
+        ]
+
+        # ------------------------------------------
+        # WORK CHARGES
+        # ------------------------------------------
+
+        work_result = WorkEntry.objects.filter(
+            house_id__in=house_ids,
+            work_date__lte=today,
+        ).aggregate(
+            total=Sum("customer_charge")
+        )
+
+        work_total = money(work_result["total"])
+
+        # ------------------------------------------
+        # REIMBURSABLE INVOICES
+        # ------------------------------------------
+
+        invoice_result = Invoice.objects.filter(
+            house_id__in=house_ids,
+            invoice_date__lte=today,
+        ).aggregate(
+            total=Sum("amount")
+        )
+
+        invoice_total = money(invoice_result["total"])
+
+        # ------------------------------------------
+        # CUSTOMER PAYMENTS
+        # ------------------------------------------
+
+        payment_result = CustomerPayment.objects.filter(
+            customer=customer,
+            payment_date__lte=today,
+        ).aggregate(
+            total=Sum("amount")
+        )
+
+        payment_total = money(payment_result["total"])
+
+        # ------------------------------------------
+        # MONTHLY VILLA PROGRAMS
+        # ------------------------------------------
+
+        program_total = Decimal("0.00")
+        undated_programs = []
+
+        current_month = today.replace(day=1)
+
+        for house in houses:
+
+            programs = list(
+                VillaProgram.objects.filter(house=house)
+            )
+
+            if not programs:
+                continue
+
+            # The villa creation month is used as the
+            # provisional start for programs that do
+            # not have an explicit start date.
+            #
+            # A program with a start_date uses its
+            # actual starting month instead.
+
+            villa_first_month = (
+                timezone.localdate(house.created_at)
+                .replace(day=1)
+            )
+
+            first_months = []
+
+            for program in programs:
+
+                if program.start_date:
+                    first_months.append(
+                        program.start_date.replace(day=1)
+                    )
+                else:
+                    first_months.append(villa_first_month)
+
+                    undated_programs.append(
+                        f"{house.name}: "
+                        f"{program.get_program_type_display()}"
+                    )
+
+            if not first_months:
+                continue
+
+            month = min(first_months)
+
+            while month <= current_month:
+
+                # Reuse the existing service function.
+                # It charges the full monthly price
+                # whenever the program overlaps a month.
+
+                # For undated programs, exclude months
+                # before the villa creation month.
+                if month < villa_first_month:
+                    dated_programs_total = Decimal("0.00")
+
+                    for program in programs:
+                        if (
+                            program.start_date is not None
+                            and program.start_date <=
+                            get_month_end(month)
+                            and (
+                                program.end_date is None
+                                or program.end_date >= month
+                            )
+                        ):
+                            dated_programs_total += money(
+                                program.price
+                            )
+
+                    program_total += dated_programs_total
+
+                else:
+                    program_total += (
+                        get_monthly_program_revenue(
+                            house,
+                            month,
+                        )
+                    )
+
+                month = get_next_month(month)
+
+        program_total = money(program_total)
+
+        # ------------------------------------------
+        # TOTAL CUSTOMER CHARGES
+        # ------------------------------------------
+
+        total_charges = money(
+            work_total
+            + program_total
+            + invoice_total
+        )
+
+        # ------------------------------------------
+        # OUTSTANDING BALANCE
+        # ------------------------------------------
+
+        balance = money(
+            total_charges - payment_total
+        )
+
+        return {
+            "work": work_total,
+            "programs": program_total,
+            "invoices": invoice_total,
+            "charges": total_charges,
+            "payments": payment_total,
+            "balance": balance,
+            "undated_programs": undated_programs,
+            "villa_count": len(houses),
+        }
+
+    @admin.display(description="Outstanding balance")
+    def billing_balance(self, obj):
+
+        totals = self.get_billing_totals(obj)
+
+        return f"€{totals['balance']:,.2f}"
+
+    @admin.display(description="Customer account")
+    def customer_billing_card(self, obj):
+
+        if not obj or not obj.pk:
+            return "Save the customer to see billing details."
+
+        totals = self.get_billing_totals(obj)
+
+        warning = ""
+
+        if totals["undated_programs"]:
+            warning = format_html(
+                "<p style='color:#b45309;'>"
+                "<strong>Billing date warning:</strong> "
+                "{} program(s) have no start date. "
+                "Their charges are estimated from the "
+                "villa creation month. Confirm their "
+                "actual billing start dates before "
+                "relying on this balance."
+                "</p>",
+                len(totals["undated_programs"]),
+            )
+
+        return format_html(
+            "<div style='max-width:750px;"
+            "line-height:2;padding:12px 0;'>"
+
+            "<h2>Customer Billing Card</h2>"
+
+            "<p><strong>Customer:</strong> {}</p>"
+
+            "<p><strong>Managed villas:</strong> {}</p>"
+
+            "<hr>"
+
+            "<h3>Charges</h3>"
+
+            "<p>Work charges: <strong>€{}</strong></p>"
+
+            "<p>BP / Gardening / Pool: "
+            "<strong>€{}</strong></p>"
+
+            "<p>Reimbursable villa invoices: "
+            "<strong>€{}</strong></p>"
+
+            "<hr>"
+
+            "<p><strong>Total charges: €{}</strong></p>"
+
+            "<h3>Payments</h3>"
+
+            "<p>Total customer payments: "
+            "<strong>€{}</strong></p>"
+
+            "<hr>"
+
+            "<h2>Outstanding balance: €{}</h2>"
+
+            "<p style='color:#777;'>"
+            "Balance includes charges and payments "
+            "through today."
+            "</p>"
+
+            "{}"
+
+            "</div>",
+
+            obj.name,
+            totals["villa_count"],
+            f"{totals['work']:,.2f}",
+            f"{totals['programs']:,.2f}",
+            f"{totals['invoices']:,.2f}",
+            f"{totals['charges']:,.2f}",
+            f"{totals['payments']:,.2f}",
+            f"{totals['balance']:,.2f}",
+            warning,
+        )
+
+
+def get_month_end(month_start):
+    """
+    Return the final day of a calendar month.
+    """
+    from calendar import monthrange
+
+    last_day = monthrange(
+        month_start.year,
+        month_start.month,
+    )[1]
+
+    return date(
+        month_start.year,
+        month_start.month,
+        last_day,
+    )
+
+
+# ==================================================
+# VILLA FINANCIAL SUMMARY INLINE
+# ==================================================
+
+class VillaFinancialSummaryInline(admin.TabularInline):
+    model = VillaFinancialSummary
+
+    extra = 0
+    can_delete = False
+
+    fields = (
+        "period_type",
+        "period_start",
+        "work_revenue",
+        "program_revenue",
+        "total_revenue",
+        "employee_cost",
+        "invoice_expenses",
+        "total_cost",
+        "gross_margin",
+    )
+
+    readonly_fields = fields
+
+
+# ==================================================
+# DEPARTMENT FINANCIAL SUMMARY INLINE
+# ==================================================
+
+class DepartmentFinancialSummaryInline(admin.TabularInline):
+    model = DepartmentFinancialSummary
+    fk_name = "department"
+
+    extra = 0
+    can_delete = False
+
+    fields = (
+        "house",
+        "period_type",
+        "period_start",
+        "work_revenue",
+        "employee_cost",
+        "invoice_expenses",
+        "total_cost",
+        "gross_margin",
+    )
+
+    readonly_fields = fields
+
+
+# ==================================================
+# VILLA SERVICE PRICE INLINE
+# ==================================================
+
+class VillaServicePriceInline(admin.TabularInline):
+    model = VillaServicePrice
+    extra = 1
+
+
+# ==================================================
+# VILLA INFORMATION AND TANK INLINES
+# ==================================================
+
+class HouseInfoInline(admin.StackedInline):
+    model = HouseInfo
+    extra = 0
+    max_num = 1
+    can_delete = False
+    fieldsets = (
+        ("Wi-Fi", {"fields": ("wifi_name", "wifi_password")}),
+        ("Alarm", {"fields": ("alarm_code", "alarm_company", "alarm_phone")}),
+        ("Access and emergencies", {"fields": ("access_instructions", "emergency_notes")}),
+    )
+
+
+class HouseWaterTankInline(admin.TabularInline):
+    model = HouseWaterTank
+    extra = 0
+    fields = ("name", "capacity_litres", "minimum_level_litres", "notes")
+
+
+# ==================================================
+# VILLA ADMIN
+# ==================================================
+
+@admin.register(House)
+class VillaAdmin(admin.ModelAdmin):
+
+    list_display = (
+        "name",
+        "customer",
+        "area",
+    )
+
+    list_filter = ("area",)
+
+    search_fields = (
+        "name",
+        "customer__name",
+        "customer__company_name",
+    )
+
+    inlines = [
+        VillaProgramInline,
+        VillaServicePriceInline,
+        VillaFinancialSummaryInline,
+        HouseInfoInline,
+        HouseWaterTankInline,
+    ]
+
+    actions = ["recalculate_finances"]
+
+    fieldsets = (
+        (
+            "Villa information",
+            {
+                "fields": (
+                    "name",
+                    "customer",
+                    "area",
+                    "description",
+                )
+            },
+        ),
+    )
+
+    @admin.action(
+        description="Recalculate villa financial summaries"
+    )
+    def recalculate_finances(self, request, queryset):
+
+        for villa in queryset:
+            rebuild_villa_financial_summaries(villa)
+
+        self.message_user(
+            request,
+            "Villa financial summaries recalculated successfully.",
+        )
+
+
+# ==================================================
+# DEPARTMENT ADMIN
+# ==================================================
+
+@admin.register(Department)
+class DepartmentAdmin(admin.ModelAdmin):
+
+    list_display = ("name",)
+
+    search_fields = ("name",)
+
+    inlines = [
+        DepartmentFinancialSummaryInline,
+    ]
+
+    actions = ["recalculate_finances"]
+
+    @admin.action(
+        description="Recalculate department financial summaries"
+    )
+    def recalculate_finances(self, request, queryset):
+
+        for department in queryset:
+            rebuild_department_financial_summaries(
+                department
+            )
+
+        self.message_user(
+            request,
+            "Department financial summaries recalculated successfully.",
+        )
+
+
+# ==================================================
+# SERVICE CATEGORY ADMIN
+# ==================================================
+
+@admin.register(ServiceCategory)
+class ServiceCategoryAdmin(admin.ModelAdmin):
+
+    list_display = (
+        "name",
+        "department",
+    )
+
+    list_filter = ("department",)
+
+    search_fields = (
+        "name",
+        "department__name",
+    )
+
+
+# ==================================================
+# VILLA SERVICE PRICE ADMIN
+# ==================================================
+
+@admin.register(VillaServicePrice)
+class VillaServicePriceAdmin(admin.ModelAdmin):
+
+    list_display = (
+        "house",
+        "service",
+        "hourly_price",
+    )
+
+    list_filter = (
+        "house",
+        "service__department",
+        "service",
+    )
+
+    search_fields = (
+        "house__name",
+        "service__name",
+    )
+
+
+# ==================================================
+# EMPLOYEE ADMIN
+# ==================================================
+
+@admin.register(Employee)
+class EmployeeAdmin(admin.ModelAdmin):
+
+    list_display = (
+        "first_name",
+        "last_name",
+        "department",
+        "salary_type",
+        "salary_rate",
+        "is_active",
+    )
+
+    list_filter = (
+        "department",
+        "salary_type",
+        "is_active",
+    )
+
+    search_fields = (
+        "first_name",
+        "last_name",
+        "email",
+        "phone",
+    )
+
+    fieldsets = (
+        (
+            "Personal Information",
+            {
+                "fields": (
+                    "first_name",
+                    "last_name",
+                    "email",
+                    "phone",
+                    "department",
+                    "hire_date",
+                    "is_active",
+                )
+            },
+        ),
+        (
+            "Salary Information",
+            {
+                "fields": (
+                    "salary_type",
+                    "hourly_rate",
+                    "daily_rate",
+                    "monthly_salary",
+                )
+            },
+        ),
+        (
+            "Additional Information",
+            {
+                "fields": ("notes",)
+            },
+        ),
+    )
+
+
+# ==================================================
+# WORK ENTRY ADMIN
+# ==================================================
+
+@admin.register(WorkEntry)
+class WorkEntryAdmin(admin.ModelAdmin):
+
+    list_display = (
+        "work_date",
+        "employee",
+        "house",
+        "service",
+        "hours",
+        "customer_hourly_rate_snapshot",
+        "customer_charge",
+        "employee_cost",
+        "total_company_cost_display",
+        "gross_margin",
+    )
+
+    list_filter = (
+        "work_date",
+        "employee",
+        "house",
+        "service",
+        "service__department",
+    )
+
+    search_fields = (
+        "employee__first_name",
+        "employee__last_name",
+        "house__name",
+        "description",
+    )
+
+    date_hierarchy = "work_date"
+
+    readonly_fields = (
+        "employee_salary_type_snapshot",
+        "employee_rate_snapshot",
+        "employee_cost",
+        "customer_hourly_rate_snapshot",
+        "customer_charge",
+        "created_at",
+    )
+
+    @admin.display(description="Total company cost")
+    def total_company_cost_display(self, obj):
+        return obj.total_company_cost
+
+
+# ==================================================
+# INVOICE ADMIN
+# ==================================================
+
+@admin.register(Invoice)
+class InvoiceAdmin(admin.ModelAdmin):
+
+    list_display = (
+        "invoice_date",
+        "supplier",
+        "invoice_number",
+        "department",
+        "house",
+        "amount",
+    )
+
+    list_filter = (
+        "invoice_date",
+        "department",
+        "house",
+    )
+
+    search_fields = (
+        "supplier__name",
+        "invoice_number",
+        "description",
+        "department__name",
+        "house__name",
+    )
+
+    date_hierarchy = "invoice_date"
+
+
+# ==================================================
+# DEPARTMENT COST ADMIN
+# ==================================================
+
+@admin.register(DepartmentCost)
+class DepartmentCostAdmin(admin.ModelAdmin):
+
+    list_display = (
+        "cost_date",
+        "department",
+        "house",
+        "description",
+        "amount",
+    )
+
+    list_filter = (
+        "cost_date",
+        "department",
+        "house",
+    )
+
+    search_fields = (
+        "description",
+        "department__name",
+        "house__name",
+        "notes",
+    )
+
+    date_hierarchy = "cost_date"
+
+
+# ==================================================
+# SUPPLIER PAYMENTS
+# ==================================================
+
+@admin.register(SupplierPayment)
+class SupplierPaymentAdmin(admin.ModelAdmin):
+
+    list_display = (
+        "supplier",
+        "payment_date",
+        "amount",
+        "reference",
+    )
+
+    list_filter = (
+        "supplier",
+        "payment_date",
+    )
+
+    search_fields = (
+        "supplier__name",
+        "reference",
+        "notes",
+    )
+
+    autocomplete_fields = ("supplier",)
+
+    ordering = ("-payment_date", "-id")
+
+
+
+# ==================================================
+# VILLA PROPERTY INFORMATION AND CONTACTS
+# ==================================================
+
+class HouseTechnicianInline(admin.TabularInline):
+    model = HouseTechnician
+    extra = 1
+    fields = ("technician_type", "name", "phone", "company", "email", "is_primary", "notes")
+
+
+@admin.register(HouseInfo)
+class HouseInfoAdmin(admin.ModelAdmin):
+    list_display = ("house", "wifi_name", "alarm_company", "alarm_phone")
+    search_fields = ("house__name", "house__customer__name", "wifi_name", "alarm_company")
+    autocomplete_fields = ("house",)
+    inlines = [HouseTechnicianInline]
+    fieldsets = (
+        ("Villa", {"fields": ("house",)}),
+        ("Wi-Fi (authorized staff only)", {"fields": ("wifi_name", "wifi_password")}),
+        ("Alarm (authorized staff only)", {"fields": ("alarm_code", "alarm_company", "alarm_phone")}),
+        ("Access", {"fields": ("access_instructions", "emergency_notes")}),
+    )
+
+
+@admin.register(HouseTechnician)
+class HouseTechnicianAdmin(admin.ModelAdmin):
+    list_display = ("name", "technician_type", "house_info", "phone", "company", "is_primary")
+    list_filter = ("technician_type", "is_primary")
+    search_fields = ("name", "phone", "company", "house_info__house__name")
+    autocomplete_fields = ("house_info",)
+
+
+# ==================================================
+# WATER: MUNICIPAL METER AND SOURCE SWITCHES
+# ==================================================
+
+@admin.register(HouseWaterReading)
+class HouseWaterReadingAdmin(admin.ModelAdmin):
+    list_display = ("house", "reading_date", "meter_litres", "consumed_since_previous", "daily_average", "checked_by")
+    list_filter = ("house", "reading_date")
+    search_fields = ("house__name", "checked_by", "notes")
+    autocomplete_fields = ("house",)
+    date_hierarchy = "reading_date"
+    readonly_fields = ("consumed_since_previous", "daily_average", "created_at")
+
+    @admin.display(description="Consumed since previous (L)")
+    def consumed_since_previous(self, obj):
+        if not obj.pk:
+            return "—"
+        value = obj.consumption_litres
+        return f"{value:,.2f} L" if value is not None else "—"
+
+    @admin.display(description="Average per day (L)")
+    def daily_average(self, obj):
+        if not obj.pk:
+            return "—"
+        value = obj.daily_average_litres
+        return f"{value:,.2f} L/day" if value is not None else "—"
+
+
+@admin.register(HouseWaterSourcePeriod)
+class HouseWaterSourcePeriodAdmin(admin.ModelAdmin):
+    list_display = ("house", "source", "started_at", "ended_at", "currently_active")
+    list_filter = ("source", "house", "started_at")
+    search_fields = ("house__name", "notes")
+    autocomplete_fields = ("house",)
+    date_hierarchy = "started_at"
+
+    @admin.display(boolean=True, description="Active")
+    def currently_active(self, obj):
+        return obj.ended_at is None
+
+
+# ==================================================
+# WATER: TANKS, VISUAL CHECKS, AND DELIVERIES
+# ==================================================
+
+class HouseWaterTankReadingInline(admin.TabularInline):
+    model = HouseWaterTankReading
+    extra = 0
+    fields = ("reading_date", "visual_level", "checked_by", "notes")
+    show_change_link = True
+
+
+@admin.register(HouseWaterTank)
+class HouseWaterTankAdmin(admin.ModelAdmin):
+    list_display = ("house", "name", "capacity_litres", "minimum_level_litres", "latest_visual_level")
+    list_filter = ("house",)
+    search_fields = ("house__name", "name")
+    autocomplete_fields = ("house",)
+    inlines = [HouseWaterTankReadingInline]
+
+    @admin.display(description="Last visual check")
+    def latest_visual_level(self, obj):
+        reading = obj.level_readings.order_by("-reading_date", "-pk").first()
+        return reading.get_visual_level_display() if reading else "Not checked"
+
+
+@admin.register(HouseWaterTankReading)
+class HouseWaterTankReadingAdmin(admin.ModelAdmin):
+    list_display = ("tank", "reading_date", "visual_level", "estimated_remaining", "checked_by")
+    list_filter = ("visual_level", "reading_date")
+    search_fields = ("tank__house__name", "tank__name", "checked_by")
+    autocomplete_fields = ("tank",)
+    date_hierarchy = "reading_date"
+    readonly_fields = ("estimated_remaining",)
+
+    @admin.display(description="Estimated remaining (not measured)")
+    def estimated_remaining(self, obj):
+        if not obj.pk:
+            return "—"
+        value = obj.estimated_litres
+        return f"~{value:,.0f} L (visual estimate)" if value is not None else "Unknown"
+
+
+@admin.register(HouseWaterDelivery)
+class HouseWaterDeliveryAdmin(admin.ModelAdmin):
+    list_display = ("delivery_date", "tank", "supplier_name", "litres_delivered", "water_cost", "delivery_fee", "total_amount", "effective_unit_price", "invoice_pdf")
+    list_filter = ("delivery_date", "tank__house")
+    search_fields = ("tank__house__name", "supplier_name", "supplier_phone", "notes")
+    autocomplete_fields = ("tank",)
+    date_hierarchy = "delivery_date"
+    readonly_fields = ("effective_unit_price",)
+
+    @admin.display(description="Effective €/L")
+    def effective_unit_price(self, obj):
+        if not obj.pk:
+            return "—"
+        value = obj.price_per_litre
+        return f"€{value:,.4f}" if value is not None else "—"
+
+
+class HouseWaterTariffCubicMeterForm(forms.ModelForm):
+    """Admin uses m³ while existing storage and calculations remain in litres."""
+
+    from_cubic_meters = forms.DecimalField(
+        label="From (m³ / 1,000 litres)", min_value=Decimal("0"),
+        max_digits=11, decimal_places=3,
+    )
+    to_cubic_meters = forms.DecimalField(
+        label="To (m³ / 1,000 litres) — blank for unlimited",
+        required=False, min_value=Decimal("0"), max_digits=11, decimal_places=3,
+    )
+
+    class Meta:
+        model = HouseWaterTariff
+        fields = ("price_per_1000_litres",)
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self.instance and self.instance.pk:
+            self.fields["from_cubic_meters"].initial = self.instance.from_litres / Decimal("1000")
+            if self.instance.to_litres is not None:
+                self.fields["to_cubic_meters"].initial = self.instance.to_litres / Decimal("1000")
+
+    def clean(self):
+        cleaned = super().clean()
+        start = cleaned.get("from_cubic_meters")
+        end = cleaned.get("to_cubic_meters")
+        if start is None:
+            return cleaned
+        if end is not None and end <= start:
+            self.add_error("to_cubic_meters", "To must be greater than From.")
+            return cleaned
+        from_litres = start * Decimal("1000")
+        to_litres = end * Decimal("1000") if end is not None else None
+        for other in HouseWaterTariff.objects.exclude(pk=self.instance.pk):
+            if (to_litres is None or other.from_litres < to_litres) and (
+                other.to_litres is None or from_litres < other.to_litres
+            ):
+                self.add_error("from_cubic_meters", "This bracket overlaps an existing bracket.")
+                break
+        return cleaned
+
+    def save(self, commit=True):
+        instance = super().save(commit=False)
+        instance.from_litres = self.cleaned_data["from_cubic_meters"] * Decimal("1000")
+        end = self.cleaned_data["to_cubic_meters"]
+        instance.to_litres = end * Decimal("1000") if end is not None else None
+        if commit:
+            instance.save()
+            self.save_m2m()
+        return instance
+
+
+@admin.register(HouseWaterTariff)
+class HouseWaterTariffAdmin(admin.ModelAdmin):
+    form = HouseWaterTariffCubicMeterForm
+    list_display = ("from_m3", "to_m3", "price_per_1000_litres")
+    ordering = ("from_litres",)
+    fields = ("from_cubic_meters", "to_cubic_meters", "price_per_1000_litres")
+
+    @admin.display(description="From (m³)", ordering="from_litres")
+    def from_m3(self, obj):
+        return obj.from_litres / Decimal("1000")
+
+    @admin.display(description="To (m³)", ordering="to_litres")
+    def to_m3(self, obj):
+        return obj.to_litres / Decimal("1000") if obj.to_litres is not None else "Unlimited"
+
+
+# ==================================================
+# UTILITIES: WATER AND ELECTRICITY INVOICES
+# ==================================================
+@admin.register(HouseWaterBill)
+
+class HouseWaterBillAdmin(admin.ModelAdmin):
+    list_display = (
+        "house", "meter_number", "supply_number", "billing_from", "billing_to",
+        "billed_litres", "total_amount", "invoice_pdf",
+    )
+    list_filter = ("house", "billing_to")
+    search_fields = (
+        "house__name", "house__customer__name", "meter_number",
+        "supply_number", "invoice_number", "notes",
+    )
+    autocomplete_fields = ("house",)
+    date_hierarchy = "billing_to"
+    fields = (
+        "house", "meter_number", "supply_number", "billing_from", "billing_to",
+        "invoice_date", "invoice_number", "meter_start_litres",
+        "meter_end_litres", "billed_litres", "total_amount", "invoice_pdf", "notes",
+    )
+
+
+@admin.register(HouseElectricityBill)
+class HouseElectricityBillAdmin(admin.ModelAdmin):
+    list_display = (
+        "house", "meter_number", "supply_number", "provider_name",
+        "billing_from", "billing_to", "consumption_kwh", "total_amount", "invoice_pdf",
+    )
+    list_filter = ("house", "billing_to")
+    search_fields = (
+        "house__name", "house__customer__name", "meter_number",
+        "supply_number", "invoice_number", "provider_name", "notes",
+    )
+    autocomplete_fields = ("house",)
+    date_hierarchy = "billing_to"
+    fields = (
+        "house", "meter_number", "supply_number", "provider_name",
+        "billing_from", "billing_to", "invoice_date", "invoice_number",
+        "consumption_kwh", "total_amount", "invoice_pdf", "notes",
+    )
+
+
+# ==================================================
+# MUNICIPAL WATER BILLING CYCLES (TARIFF RESET DATES)
+# ==================================================
+
+
+
+
+
+from .models import HouseInspection
+
+
+@admin.register(HouseInspection)
+class HouseInspectionAdmin(admin.ModelAdmin):
+    list_display = (
+        "house",
+        "inspection_date",
+        "checked_by",
+        "condition",
+    )
+
+    list_filter = (
+        "condition",
+        "inspection_date",
+        "house",
+    )
+
+    search_fields = (
+        "house__name",
+        "checked_by",
+        "notes",
+    )
+
+    date_hierarchy = "inspection_date"
+    ordering = ("-inspection_date",)

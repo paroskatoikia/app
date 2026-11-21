@@ -1,0 +1,53 @@
+# PAROS KATOIKIA - Render Deployment
+# Place this file next to manage.py
+
+databases:
+  - name: paros-katoikia-db
+    databaseName: paroskatoikia
+    user: paroskatoikia
+    plan: basic-256mb
+
+services:
+  # Django Backend
+  - type: web
+    name: paros-katoikia-api
+    runtime: python
+    plan: starter
+    buildCommand: bash render_build.sh
+    startCommand: gunicorn business_manager.wsgi:application --bind 0.0.0.0:$PORT
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: paros-katoikia-db
+          property: connectionString
+
+      - key: DJANGO_SECRET_KEY
+        generateValue: true
+
+      - key: DJANGO_DEBUG
+        value: "false"
+
+      - key: DJANGO_ALLOWED_HOSTS
+        value: paros-katoikia-api.onrender.com
+
+      - key: DJANGO_CORS_ALLOWED_ORIGINS
+        value: https://paros-katoikia-web.onrender.com
+
+      - key: DJANGO_CSRF_TRUSTED_ORIGINS
+        value: https://paros-katoikia-web.onrender.com
+
+  # React Frontend
+  - type: web
+    name: paros-katoikia-web
+    runtime: static
+    rootDir: villa-management-frontend
+    buildCommand: npm ci && npm run build
+    staticPublishPath: ./dist
+    envVars:
+      - key: VITE_API_URL
+        value: https://paros-katoikia-api.onrender.com/api
+
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
