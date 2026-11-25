@@ -180,10 +180,32 @@ USE_TZ = True
 STATIC_URL = '/static/'
 STATIC_ROOT = BASE_DIR / "staticfiles"
 STORAGES = {
-    "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
-    "staticfiles": {"BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage"},
+    "default": {
+        "BACKEND": "django.core.files.storage.FileSystemStorage",
+    },
+    "staticfiles": {
+        "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
+    },
 }
 
+# Supabase cloud storage for production
+if os.getenv("USE_SUPABASE_STORAGE", "false").lower() == "true":
+    STORAGES["default"] = {
+        "BACKEND": "storages.backends.s3.S3Storage",
+        "OPTIONS": {
+            "access_key": os.environ["SUPABASE_S3_ACCESS_KEY"],
+            "secret_key": os.environ["SUPABASE_S3_SECRET_KEY"],
+            "bucket_name": "paroskatoikia-media",
+            "endpoint_url": os.environ["SUPABASE_S3_ENDPOINT"],
+            "region_name": os.environ["SUPABASE_S3_REGION"],
+            "addressing_style": "path",
+            "signature_version": "s3v4",
+            "default_acl": None,
+            "querystring_auth": True,
+            "querystring_expire": 3600,
+            "file_overwrite": False,
+        },
+    }
 # IMPORTANT: MEDIA_ROOT is local filesystem storage. On Render, use a persistent
 # disk or an external object store for uploaded invoice PDFs and other media.
 
