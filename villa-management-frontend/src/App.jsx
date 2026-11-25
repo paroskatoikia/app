@@ -2883,7 +2883,7 @@ export default function App() {
   );
 
   // Villa financial chart data.
-  const villaChartData = useMemo(
+  const villaPerformanceData = useMemo(
     () =>
       buildVillaChart(
         data.villas,
@@ -2894,10 +2894,11 @@ export default function App() {
     [data.villas, data.workEntries, data.programs, data.invoices]
   );
 
-  const villaPerformanceData = useMemo(
-    () => villaChartData,
-    [villaChartData]
-  );
+  // Hide internal company properties from customer villa charts only.
+  const villaChartData = useMemo(() => {
+    const internalIds = new Set(data.villas.filter((villa) => villa.is_company_property === true).map((villa) => String(villa.id)));
+    return villaPerformanceData.filter((villa) => !internalIds.has(String(villa.id)));
+  }, [villaPerformanceData, data.villas]);
 
   const departmentPerformanceData = useMemo(
     () => buildDepartmentPerformance(data.departments, data.services, data.workEntries),
@@ -2915,12 +2916,12 @@ export default function App() {
 
   const filteredVillaCharts = useMemo(() => {
     const term = villaChartSearch.trim().toLowerCase();
-    if (!term) return villaPerformanceData;
+    if (!term) return villaChartData;
 
-    return villaPerformanceData.filter((villa) =>
+    return villaChartData.filter((villa) =>
       villa.villa.toLowerCase().includes(term)
     );
-  }, [villaPerformanceData, villaChartSearch]);
+  }, [villaChartData, villaChartSearch]);
 
   const villaTableTotalPages = Math.max(
     1,
