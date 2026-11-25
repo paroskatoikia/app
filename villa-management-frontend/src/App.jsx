@@ -32,6 +32,7 @@ const ENDPOINTS = {
 
 const navigation = [
   { id: "overview", label: "Overview", icon: LayoutDashboard },
+  { id: "importantJobs", label: "Important Jobs", icon: Bell },
   { id: "villas", label: "Villas", icon: Building2 },
   { id: "houseChecks", label: "House Checks", icon: ClipboardCheck },
   { id: "waterMeasurements", label: "Water Measurements", icon: Droplets },
@@ -40,6 +41,7 @@ const navigation = [
   { id: "suppliers", label: "Suppliers", icon: Truck },
   { id: "supplierPayments", label: "Supplier Payments", icon: CreditCard },
   { id: "employees", label: "Employees", icon: UserRound },
+  { id: "companyGas", label: "Company Gas", icon: Truck },
   { id: "departments", label: "Departments", icon: BriefcaseBusiness },
   { id: "services", label: "Services", icon: Sprout },
   { id: "workEntries", label: "Work Entries", icon: ClipboardList },
@@ -2142,6 +2144,173 @@ function WeeklyOperationsPage({ kind, token, villas }) {
   </>;
 }
 
+const JOB_LEVELS = [
+  { key: 'overdue', label: 'Overdue', color: '#991b1b', score: 5 },
+  { key: 'critical', label: 'Critical', color: '#dc2626', score: 4 },
+  { key: 'urgent', label: 'Urgent', color: '#ea580c', score: 3 },
+  { key: 'important', label: 'Important', color: '#a16207', score: 2 },
+  { key: 'normal', label: 'Normal', color: '#52765b', score: 1 },
+];
+
+function ImportantJobsPage({ token, customers }) {
+  const [jobs, setJobs] = useState([]);
+  const [tab, setTab] = useState('pending');
+  const [search, setSearch] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [editing, setEditing] = useState(null);
+  const [revision, setRevision] = useState(0);
+  const endpoint = '/important-job-reminders/';
+  const levelFor = (job) => JOB_LEVELS.find(l => l.key === job.importance) || JOB_LEVELS[4];
+  async function request(path, options = {}) {
+    const url = new URL(path.startsWith('http') ? path : `${API_URL}${path}`);
+    if (url.origin !== new URL(API_URL).origin) throw new Error('Unexpected API origin');
+    const response = await fetch(url, { ...options, headers: { Authorization: `Bearer ${token}`, ...(options.body ? {'Content-Type':'application/json'} : {}) } });
+    const body = await response.json().catch(() => null);
+    if (!response.ok) throw new Error(body?.detail || JSON.stringify(body) || `Request failed (${response.status})`);
+    return body;
+  }
+  useEffect(() => {
+    let cancelled = false;
+    async function load() {
+      setLoading(true); setError('');
+      try {
+        let next = `${endpoint}?completed=all`;
+        const records = [];
+        while (next) {
+          const body = await request(next);
+          records.push(...getArray(body));
+          next = body?.next;
+        }
+        if (!cancelled) setJobs(records);
+      } catch (err) { if (!cancelled) setError(err.message); }
+      finally { if (!cancelled) setLoading(false); }
+    }
+    load();
+    const timer = setInterval(() => setRevision(v => v + 1), 300000);
+    return () => { cancelled = true; clearInterval(timer); };
+  }, [token, revision]);
+  const pending = jobs.filter(j => !j.completed);
+  const completed = jobs.filter(j => j.completed);
+  const chart = JOB_LEVELS.map(l => ({ ...l, value: pending.filter(j => j.importance === l.key).length }));
+  const visible = (tab === 'pending' ? pending : completed).filter(j => `${j.customer_name} ${j.description}`.toLowerCase().includes(search.toLowerCase())).sort((a,b) => tab === 'pending' ? levelFor(b).score - levelFor(a).score || a.deadline.localeCompare(b.deadline) || a.id-b.id : String(b.completed_at || '').localeCompare(String(a.completed_at || '')));
+  async function mutate(path, body, method='POST') {
+    setBusy(true); setError('');
+    try {
+      const saved = await request(path, { method, ...(body ? {body:JSON.stringify(body)} : {}) });
+      setJobs(old => [...old.filter(j => j.id !== saved.id), saved]);
+      setEditing(null); setRevision(v => v+1);
+    } catch(err) { setError(err.message); }
+    finally { setBusy(false); }
+  }
+  const field = {padding:'10px', border:'1px solid #d9e2d9', borderRadius:8, width:'100%', boxSizing:'border-box'};
+  const blank = {customer:'', description:'', deadline:getTodayLocalDate(), procedure_days:1};
+  return <>
+    <div className="welcome-row"><div><p className="eyebrow">OPERATIONS / DEADLINES</p><h1>Important Jobs</h1><p className="muted">Plan ahead, track urgency and complete your duties.</p></div><div style={{display:'flex',gap:8,flexWrap:'wrap'}}><button className="refresh-button" disabled={loading || busy} onClick={()=>setRevision(v=>v+1)}><RefreshCw size={16}/> Refresh</button><button className="primary-button" disabled={busy} onClick={()=>setEditing({...blank})}>+ New job</button></div></div>
+    {error && <div className="error-banner" role="alert">{error}</div>}
+    <div className="stats-grid"><StatCard label="Pending jobs" value={pending.length} detail="All open duties" icon={ClipboardList}/><StatCard label="Critical / overdue" value={pending.filter(j=>['critical','overdue'].includes(j.importance)).length} detail="Immediate attention" icon={CircleAlert}/><StatCard label="Email threshold reached" value={pending.filter(j=>j.email_required).length} detail="Within 1.5 × procedure days" icon={Bell}/><StatCard label="Completed" value={completed.length} detail="Job history" icon={ClipboardCheck}/></div>
+    <section className="panel" style={{marginTop:20}}><div className="panel-heading"><div><p className="eyebrow">PRIORITY DISTRIBUTION</p><h2>Pending workload</h2></div></div>{pending.length ? <div style={{height:240}}><ResponsiveContainer width="100%" height="100%"><BarChart data={chart}><CartesianGrid vertical={false} strokeDasharray="3 3"/><XAxis dataKey="label" tick={{fontSize:11}}/><YAxis allowDecimals={false}/><Tooltip/><Bar dataKey="value" name="Jobs" radius={[6,6,0,0]} maxBarSize={55}>{chart.map(l=><Cell key={l.key} fill={l.color}/>)}</Bar></BarChart></ResponsiveContainer></div> : <p className="muted">No pending jobs to chart.</p>}</section>
+    {editing && <form className="panel" style={{marginTop:20}} onSubmit={e=>{e.preventDefault();mutate(editing.id?`${endpoint}${editing.id}/`:endpoint,{customer:editing.customer,description:editing.description,deadline:editing.deadline,procedure_days:Number(editing.procedure_days)},editing.id?'PATCH':'POST');}}><h2>{editing.id?'Edit job':'New job'}</h2><div style={{display:'grid',gap:12,gridTemplateColumns:'repeat(auto-fit,minmax(180px,1fr))'}}><label>Customer<select required style={field} value={editing.customer} onChange={e=>setEditing({...editing,customer:e.target.value})}><option value="">Select customer</option>{customers.map(c=><option key={c.id} value={c.id}>{c.name || c.full_name || `Customer #${c.id}`}</option>)}</select></label><label>Deadline<input required type="date" style={field} value={editing.deadline} onChange={e=>setEditing({...editing,deadline:e.target.value})}/></label><label>Procedure days<input required type="number" min="1" step="1" style={field} value={editing.procedure_days} onChange={e=>setEditing({...editing,procedure_days:e.target.value})}/></label></div><label style={{display:'block',marginTop:12}}>Description<textarea required rows={3} style={field} value={editing.description} onChange={e=>setEditing({...editing,description:e.target.value})}/></label><div style={{display:'flex',gap:8,marginTop:12}}><button className="primary-button" disabled={busy}>Save job</button><button type="button" className="refresh-button" disabled={busy} onClick={()=>setEditing(null)}>Cancel</button></div></form>}
+    <section className="panel" style={{marginTop:20}}><div className="panel-heading" style={{flexWrap:'wrap'}}><div><p className="eyebrow">JOB REGISTER</p><h2>{tab==='pending'?'Pending duties':'Completed duties'}</h2></div><div style={{display:'flex',gap:8}}>{['pending','completed'].map(t=><button key={t} className={tab===t?'primary-button':'refresh-button'} aria-pressed={tab===t} onClick={()=>setTab(t)}>{t==='pending'?`Pending (${pending.length})`:`Completed (${completed.length})`}</button>)}</div></div><div className="search-box" style={{maxWidth:360,marginBottom:16}}><Search size={17}/><input aria-label="Search jobs" placeholder="Search customer or job..." value={search} onChange={e=>setSearch(e.target.value)}/></div>
+    {loading && <p className="muted">Loading reminders…</p>}{!loading && !error && !visible.length && <div className="empty-state">No matching jobs.</div>}
+    <div style={{display:'grid',gap:14}}>{visible.map(j=>{const l=j.completed?{label:'Completed',color:'#64748b'}:levelFor(j); const remaining=Number(j.days_remaining); const duration=Number(j.procedure_days); const pct=Math.max(0,Math.min(100,remaining/(duration*1.5)*100)); return <article key={j.id} style={{border:'1px solid #e4e7df',borderLeft:`5px solid ${l.color}`,borderRadius:12,padding:18,background:'rgba(255,255,255,.65)'}}><div style={{display:'flex',justifyContent:'space-between',gap:12,flexWrap:'wrap'}}><strong style={{fontSize:17,color:'#3f493f'}}>{j.customer_name}</strong><strong style={{color:l.color,fontSize:13}}>{l.label.toUpperCase()}</strong></div><p style={{whiteSpace:'pre-wrap',overflowWrap:'anywhere',margin:'10px 0 16px'}}>{j.description}</p><div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(130px,1fr))',gap:12}}>{[['Deadline',dateLabel(j.deadline)],['Procedure',`${duration} days`],['Recommended start',dateLabel(j.recommended_start_date)],['Latest start',dateLabel(j.latest_start_date)],...(j.completed?[['Completed',dateLabel(j.completed_at)]]:[['Time remaining',remaining<0?`${-remaining} days overdue`:`${remaining} days`],['Spare days',j.spare_days]])].map(([label,value])=><div key={label}><div className="muted" style={{fontSize:12}}>{label}</div><strong>{value}</strong></div>)}</div>{!j.completed && <div style={{marginTop:16}}><div className="muted" style={{fontSize:12,marginBottom:6}}>Time remaining relative to notification window ({duration*1.5} days)</div><div role="progressbar" aria-label="Remaining notification window" aria-valuenow={Math.round(pct)} style={{height:8,background:'#e6e9e2',borderRadius:8,overflow:'hidden'}}><div style={{width:`${pct}%`,height:'100%',background:l.color}}/></div><p className="muted" style={{fontSize:12}}>{j.last_notification_at?`Last email: ${dateLabel(j.last_notification_at)} (${j.last_notification_level})`:j.email_required?'Email threshold reached — awaiting scheduled check':'Email threshold not reached'}</p></div>}<div style={{display:'flex',gap:8,flexWrap:'wrap',marginTop:12}}><button className="refresh-button" disabled={busy} onClick={()=>setEditing({...j})}>Edit</button><button className="primary-button" disabled={busy} onClick={()=>mutate(`${endpoint}${j.id}/${j.completed?'reopen':'complete'}/`)}><ClipboardCheck size={16}/>{j.completed?'Reopen job':'Mark completed'}</button></div></article>})}</div></section>
+  </>;
+}
+
+function CompanyGasPage({ token, employees }) {
+  const [records, setRecords] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [revision, setRevision] = useState(0);
+  const [month, setMonth] = useState('');
+  const [employee, setEmployee] = useState('');
+  const [fuel, setFuel] = useState('');
+  const [search, setSearch] = useState('');
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+  const types = {petrol:'Petrol (Unleaded)', diesel:'Diesel', lpg:'LPG', other:'Other'};
+  const colors = ['#718477','#b99b65','#3977b8','#a18b9e'];
+  useEffect(() => {
+    const controller = new AbortController();
+    async function load() {
+      setLoading(true); setError(''); setRecords([]);
+      try {
+        let next = `${API_URL}/company-gas/`;
+        const all = [], visited = new Set();
+        while (next) {
+          const url = new URL(next, `${API_URL}/`);
+          if (url.origin !== new URL(API_URL).origin || visited.has(url.href)) throw new Error('Invalid pagination link');
+          visited.add(url.href);
+          const response = await fetch(url, {headers:{Authorization:`Bearer ${token}`}, signal:controller.signal});
+          if (!response.ok) throw new Error(`Company Gas API request failed (${response.status}). Check /api/company-gas/ and your permissions.`);
+          const body = await response.json();
+          all.push(...getArray(body)); next = body?.next;
+        }
+        if (!controller.signal.aborted) setRecords(all);
+      } catch (err) { if (!controller.signal.aborted) setError(err.message); }
+      finally { if (!controller.signal.aborted) setLoading(false); }
+    }
+    load(); return () => controller.abort();
+  }, [token, revision]);
+  const rows = records.map(r => {
+    const id = relationId(r.employee);
+    const e = employees.find(x => String(x.id) === String(id));
+    return {...r, employeeId:String(id), employeeLabel:r.employee_name || (e ? [e.first_name,e.last_name].filter(Boolean).join(' ') || e.name : '') || `Employee #${id}`, fuelLabel:types[r.gas_type] || r.gas_type, amount:number(r.price_total)};
+  });
+  const filtered = rows.filter(r => (!month || r.date?.startsWith(month)) && (!employee || r.employeeId===employee) && (!fuel || r.gas_type===fuel) && [r.employeeLabel,r.department_name,r.notes,r.fuelLabel,r.gas_type,r.date,dateLabel(r.date),r.price_total,money(r.amount)].join(' ').toLowerCase().includes(search.trim().toLowerCase())).sort((a,b)=>String(b.date).localeCompare(String(a.date)) || b.id-a.id);
+  const group = (items, key) => {const m = new Map(); items.forEach(r=>m.set(key(r),(m.get(key(r))||0)+r.amount)); return [...m].map(([name,amount])=>({name,amount}));};
+  const monthly = group(filtered,r=>r.date?.slice(0,7)||'Unknown').sort((a,b)=>a.name.localeCompare(b.name));
+  const byEmployee = group(filtered,r=>`${r.employeeLabel} (#${r.employeeId})`).sort((a,b)=>b.amount-a.amount);
+  const byFuel = group(filtered,r=>r.fuelLabel).sort((a,b)=>b.amount-a.amount);
+  const total = filtered.reduce((s,r)=>s+r.amount,0);
+  const pages = Math.max(1,Math.ceil(filtered.length/pageSize)), safePage=Math.min(page,pages);
+  const field={padding:'10px 12px',border:'1px solid #d9e2d9',borderRadius:8,maxWidth:'100%'};
+  const chart = (items, horizontal=false) => items.length ? <div style={{height:horizontal?Math.max(220,items.length*42+45):270,width:'100%'}}><ResponsiveContainer width="100%" height="100%"><BarChart data={items} layout={horizontal?'vertical':'horizontal'} margin={{top:10,right:20,left:horizontal?12:0,bottom:12}}><CartesianGrid strokeDasharray="3 3" vertical={horizontal} horizontal={!horizontal}/>{horizontal?<><XAxis type="number" tickFormatter={v=>`€${v}`}/><YAxis type="category" dataKey="name" width={145} tick={{fontSize:11}}/></>:<><XAxis dataKey="name" tick={{fontSize:11}}/><YAxis tickFormatter={v=>`€${v}`}/></>}<Tooltip formatter={v=>money(v)}/><Bar dataKey="amount" name="Fuel expense" fill={horizontal?'#718477':'#b99b65'} maxBarSize={45} radius={horizontal?[0,5,5,0]:[5,5,0,0]}/></BarChart></ResponsiveContainer></div>:<div className="empty-state">No fuel expenses to chart.</div>;
+  return <>
+    <div className="welcome-row"><div><p className="eyebrow">COMPANY EXPENSES / FUEL</p><h1>Company Gas</h1><p className="muted">Fuel expenses paid by the company for employees.</p></div><button className="refresh-button" disabled={loading} onClick={()=>setRevision(v=>v+1)}><RefreshCw size={16}/> Refresh data</button></div>
+    {error && <div className="error-message" role="alert">{error}</div>}
+    {loading && <p className="muted">Loading fuel records…</p>}
+    {!loading && !error && <>
+    <section className="panel" style={{marginBottom:20}}><div style={{display:'flex',gap:12,flexWrap:'wrap',alignItems:'end'}}><label>Month<br/><input type="month" style={field} value={month} onChange={e=>{setMonth(e.target.value);setPage(1);}}/></label><label>Employee<br/><select style={field} value={employee} onChange={e=>{setEmployee(e.target.value);setPage(1);}}><option value="">All employees</option>{[...new Map(rows.map(r=>[r.employeeId,r.employeeLabel]))].sort((a,b)=>a[1].localeCompare(b[1])).map(([id,name])=><option key={id} value={id}>{name}</option>)}</select></label><label>Fuel type<br/><select style={field} value={fuel} onChange={e=>{setFuel(e.target.value);setPage(1);}}><option value="">All fuels</option>{Object.entries(types).map(([k,v])=><option key={k} value={k}>{v}</option>)}</select></label><button className="refresh-button" onClick={()=>{setMonth('');setEmployee('');setFuel('');setSearch('');setPage(1);}}>Clear filters</button></div></section>
+    <div className="stats-grid"><StatCard label="Total fuel cost" value={money(total)} detail="Selected records" icon={Wallet}/><StatCard label="Fuel purchases" value={filtered.length} detail="Recorded transactions" icon={Truck}/><StatCard label="Employees" value={new Set(filtered.map(r=>r.employeeId)).size} detail="With fuel expenses" icon={Users}/><StatCard label="Average purchase" value={money(filtered.length?total/filtered.length:0)} detail="Cost per transaction" icon={CreditCard}/></div>
+    <section className="panel" style={{marginTop:20}}><div className="panel-heading"><div><p className="eyebrow">MONTHLY TREND</p><h2>Fuel expenses by month</h2></div></div>{chart(monthly)}</section>
+    <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(min(100%,340px),1fr))',gap:18,marginTop:20}}><section className="panel" style={{minWidth:0}}><h2>Cost by employee</h2>{chart(byEmployee,true)}</section><section className="panel" style={{minWidth:0}}><h2>Fuel type distribution</h2>{total>0?<div style={{height:300}}><ResponsiveContainer width="100%" height="100%"><PieChart><Pie data={byFuel} dataKey="amount" nameKey="name" innerRadius="45%" outerRadius="75%" label={({percent})=>`${Math.round(percent*100)}%`}>{byFuel.map((r,i)=><Cell key={r.name} fill={colors[i%colors.length]}/>)}</Pie><Tooltip formatter={v=>money(v)}/><Legend/></PieChart></ResponsiveContainer></div>:<div className="empty-state">No positive expenses to chart.</div>}</section></div>
+    <div style={{marginTop:20}}>
+      <DataTable title="Fuel expense records"
+        rows={filtered.slice((safePage-1)*pageSize,safePage*pageSize)}
+        totalCount={filtered.length}
+        searchValue={search}
+        onSearchChange={v=>{setSearch(v);setPage(1);}}
+        searchPlaceholder="Search employee, department, fuel, amount, date..."
+        emptyMessage="No matching fuel expenses."
+        headerActions={<label style={{display:'flex',alignItems:'center',gap:8}}>Rows per page <select style={field} value={pageSize} onChange={e=>{setPageSize(Number(e.target.value));setPage(1);}}>{[10,25,50,100].map(n=><option key={n} value={n}>{n}</option>)}</select></label>}
+        columns={[
+          {label:'Date',render:r=>dateLabel(r.date)},
+          {label:'Employee',key:'employeeLabel'},
+          {label:'Department',key:'department_name'},
+          {label:'Fuel',key:'fuelLabel'},
+          {label:'Amount',render:r=>money(r.amount)},
+          {label:'Notes',key:'notes'},
+          {label:'Invoice',render:r=>{
+            if (!r.invoice_pdf) return '—';
+            let url;
+            try { url = new URL(r.invoice_pdf, new URL(API_URL, window.location.origin).origin + '/'); }
+            catch { return 'Invalid invoice link'; }
+            if (!['http:','https:'].includes(url.protocol)) return 'Invalid invoice link';
+            return <a className="refresh-button" style={{display:'inline-flex',alignItems:'center',gap:6,textDecoration:'none',whiteSpace:'nowrap'}} href={url.href} target="_blank" rel="noopener noreferrer">Open PDF ↗</a>;
+          }}
+        ]}/>
+      <div style={{padding:'12px 4px',display:'flex',justifyContent:'space-between',flexWrap:'wrap',gap:8}}>
+        <span className="muted">Showing {filtered.length ? (safePage-1)*pageSize+1 : 0}–{Math.min(safePage*pageSize,filtered.length)} of {filtered.length} records</span>
+        <strong>Matching expenses: {money(total)}</strong>
+      </div>
+      <PaginationControls page={safePage} totalPages={pages} totalItems={filtered.length} onPageChange={setPage}/>
+    </div>
+    </>}
+  </>;
+}
+
 export default function App() {
   const [token, setToken] = useState(
     () => localStorage.getItem("pk_access_token")
@@ -2726,7 +2895,7 @@ export default function App() {
     );
   }
 
-  const currentPage = activePage === "houseChecks"
+  const currentPage = activePage === "companyGas" ? { title: "Company Gas" } : activePage === "houseChecks"
     ? { title: "House Checks" }
     : activePage === "waterMeasurements"
       ? { title: "Water Measurements" }
@@ -2803,7 +2972,7 @@ export default function App() {
 
           <div className="topbar-title">
             Paros <span>/</span>{" "}
-            {activePage === "overview" ? "Overview" : currentPage?.title}
+            {activePage === "importantJobs" ? "Important Jobs" : activePage === "overview" ? "Overview" : currentPage?.title}
           </div>
 
           <div className="topbar-actions">
@@ -2865,7 +3034,11 @@ export default function App() {
             </div>
           )}
 
-          {activePage === "houseChecks" || activePage === "waterMeasurements" ? (
+          {activePage === "companyGas" ? (
+            <CompanyGasPage token={token} employees={data.employees} />
+          ) : activePage === "importantJobs" ? (
+            <ImportantJobsPage token={token} customers={data.customers} />
+          ) : activePage === "houseChecks" || activePage === "waterMeasurements" ? (
             <WeeklyOperationsPage
               kind={activePage === "waterMeasurements" ? "water" : "house"}
               token={token}

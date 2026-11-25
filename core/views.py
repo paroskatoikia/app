@@ -407,3 +407,182 @@ class WeeklyChecksView(APIView):
             },
             "results": results,
         })
+
+
+from rest_framework import viewsets
+from rest_framework.permissions import IsAdminUser
+from rest_framework import viewsets
+from rest_framework.decorators import action
+from rest_framework.response import Response
+from rest_framework.permissions import IsAdminUser
+
+from .models import ImportantJobReminder
+from .serializers import ImportantJobReminderSerializer
+
+
+class ImportantJobReminderViewSet(
+    viewsets.ModelViewSet
+):
+
+    serializer_class = ImportantJobReminderSerializer
+
+    permission_classes = [IsAdminUser]
+
+    def get_queryset(self):
+
+        queryset = (
+            ImportantJobReminder.objects
+            .select_related("customer")
+        )
+
+        completed = self.request.query_params.get(
+            "completed",
+            "false",
+        )
+
+        if completed == "false":
+
+            queryset = queryset.filter(
+                completed=False
+            ).order_by(
+                "deadline",
+                "id",
+            )
+
+        elif completed == "true":
+
+            queryset = queryset.filter(
+                completed=True
+            ).order_by(
+                "-completed_at",
+                "-id",
+            )
+
+        else:
+
+            queryset = queryset.order_by(
+                "completed",
+                "deadline",
+                "id",
+            )
+
+        return queryset
+
+    def get_object(self):
+
+        # Allow completed jobs to be reopened,
+        # even when the default list shows pending jobs.
+
+        from django.shortcuts import get_object_or_404
+
+        obj = get_object_or_404(
+            ImportantJobReminder.objects.select_related(
+                "customer"
+            ),
+            pk=self.kwargs["pk"],
+        )
+
+        self.check_object_permissions(
+            self.request,
+            obj,
+        )
+
+        return obj
+
+    @action(detail=True, methods=["post"])
+    def complete(self, request, pk=None):
+
+        job = self.get_object()
+
+        job.completed = True
+        job.save()
+
+        return Response(
+            self.get_serializer(job).data
+        )
+
+    @action(detail=True, methods=["post"])
+    def reopen(self, request, pk=None):
+
+        job = self.get_object()
+
+        job.completed = False
+        job.save()
+
+        return Response(
+            self.get_serializer(job).data
+        )
+
+
+from rest_framework import viewsets, filters
+from rest_framework.permissions import IsAdminUser
+
+from .models import Company_Gas
+from .serializers import CompanyGasSerializer
+
+
+class CompanyGasViewSet(viewsets.ReadOnlyModelViewSet):
+
+    serializer_class = CompanyGasSerializer
+
+    permission_classes = [IsAdminUser]
+
+    queryset = Company_Gas.objects.select_related(
+        "employee",
+        "employee__department",
+    ).order_by("-date", "-id")
+
+    filter_backends = [
+        filters.SearchFilter,
+        filters.OrderingFilter,
+    ]
+
+    search_fields = [
+        "employee__first_name",
+        "employee__last_name",
+        "employee__department__name",
+        "gas_type",
+        "notes",
+    ]
+
+    ordering_fields = [
+        "date",
+        "price_total",
+        "gas_type",
+        "employee__last_name",
+    ]
+
+    ordering = ["-date", "-id"]
+
+    def get_queryset(self):
+
+        queryset = super().get_queryset()
+
+        employee = self.request.query_params.get("employee")
+        department = self.request.query_params.get("department")
+        gas_type = self.request.query_params.get("gas_type")
+        year = self.request.query_params.get("year")
+        month = self.request.query_params.get("month")
+
+        if employee and employee.isdigit():
+            queryset = queryset.filter(employee_id=int(employee))
+
+        if department and department.isdigit():
+            queryset = queryset.filter(
+                employee__department_id=int(department)
+            )
+
+        if gas_type:
+            queryset = queryset.filter(gas_type=gas_type)
+
+        if year and year.isdigit():
+            queryset = queryset.filter(date__year=int(year))
+
+        if month and month.isdigit():
+            if 1 <= int(month) <= 12:
+                queryset = queryset.filter(date__month=int(month))
+
+        return queryset
+
+
+

@@ -2,11 +2,14 @@ from calendar import monthrange
 from datetime import date
 from decimal import Decimal, ROUND_HALF_UP
 
-from django.db.models import Sum, Min
+from django.db.models import Sum, Min, Q
 from django.utils import timezone
 
 from .models import (
     House,
+    IKA,
+    Company_Gas,
+    DepartmentCost,
     Department,
     WorkEntry,
     Invoice,
@@ -117,6 +120,65 @@ def aggregate_amounts(queryset, fields):
 # VILLA MONTHLY SUMMARY
 # --------------------------------------------------
 
+def monthly_employee_expenses(year, month):
+    """Return allocations by (house_id, department_id); None house = overhead.
+
+    Allocate each employee's monthly IKA and fuel by recorded hours. Round
+    cumulative shares so the allocated cents always equal the original cost.
+    """
+    start, end = get_month_dates(year, month)
+    if start > timezone.localdate():
+        return {}
+    costs = {}
+    for row in IKA.objects.filter(start_date__lte=end).filter(Q(end_date__isnull=True) | Q(end_date__gte=start)).select_related("employee"):
+        key = (row.employee_id, row.employee.department_id)
+        costs.setdefault(key, [ZERO, ZERO])[0] += row.monthly_cost
+    for row in Company_Gas.objects.filter(date__range=(start, end)).select_related("employee"):
+        key = (row.employee_id, row.employee.department_id)
+        costs.setdefault(key, [ZERO, ZERO])[1] += row.price_total
+    allocations = {}
+    for (employee_id, department_id), amounts in costs.items():
+        groups = list(WorkEntry.objects.filter(employee_id=employee_id, work_date__range=(start, end), hours__gt=0).values("house_id", "service__department_id").annotate(weight=Sum("hours")).order_by("house_id", "service__department_id"))
+        if not groups:
+            groups = [{"house_id": None, "service__department_id": department_id, "weight": Decimal(1)}]
+        total = sum(g["weight"] for g in groups)
+        cumulative = ZERO
+        previous = [ZERO, ZERO]
+        for g in groups:
+            cumulative += g["weight"]
+            key = (g["house_id"], g["service__department_id"] or department_id)
+            bucket = allocations.setdefault(key, [ZERO, ZERO])
+            for i, amount in enumerate(amounts):
+                current = money(amount * cumulative / total)
+                bucket[i] += current - previous[i]
+                previous[i] = current
+    return allocations
+
+
+def allocated_employee_expenses(year, month, house=None, department=None):
+    values = [v for (h, d), v in monthly_employee_expenses(year, month).items()
+              if (house is None or h == house.pk) and (department is None or d == department.pk)]
+    return tuple(money(sum((v[i] for v in values), ZERO)) for i in range(2))
+
+
+def company_invoice_queryset(queryset):
+    # Unassigned invoices are general company costs per existing Invoice help text.
+    return queryset.filter(Q(house__is_company_property=True) | Q(house__isnull=True))
+
+
+def get_company_monthly_costs(year, month):
+    """Direct company totals, including overhead with no recorded work hours.
+
+    Do not add these totals again to allocated villa/department costs.
+    """
+    start, end = get_month_dates(year, month)
+    ika, gas = allocated_employee_expenses(year, month)
+    wages = money(WorkEntry.objects.filter(work_date__range=(start, end)).aggregate(v=Sum("employee_cost"))["v"])
+    invoices = money(company_invoice_queryset(Invoice.objects.filter(invoice_date__range=(start, end))).aggregate(v=Sum("amount"))["v"])
+    other = money(DepartmentCost.objects.filter(cost_date__range=(start, end)).aggregate(v=Sum("amount"))["v"])
+    return {"employee_cost": wages, "ika_cost": ika, "gas_cost": gas, "company_invoice_cost": invoices, "other_department_cost": other, "total_cost": money(wages + ika + gas + invoices + other)}
+
+
 def refresh_villa_month(house, year, month):
     period_start, period_end = get_month_dates(
         year,
@@ -142,6 +204,9 @@ def refresh_villa_month(house, year, month):
     employee_cost = money(work["employee_cost"])
     invoice_expenses = money(invoices["expenses"])
 
+    ika_cost, gas_cost = allocated_employee_expenses(year, month, house=house)
+    company_invoice_cost = invoice_expenses if house.is_company_property else ZERO
+
     program_revenue = get_monthly_program_revenue(
         house,
         period_start,
@@ -154,7 +219,7 @@ def refresh_villa_month(house, year, month):
 
     # Total cost includes employee costs AND invoices.
     total_cost = money(
-        employee_cost + invoice_expenses
+        employee_cost + ika_cost + gas_cost + company_invoice_cost
     )
 
     # Gross margin is revenue minus all costs.
@@ -172,6 +237,9 @@ def refresh_villa_month(house, year, month):
             "total_revenue": total_revenue,
             "employee_cost": employee_cost,
             "invoice_expenses": invoice_expenses,
+            "ika_cost": ika_cost,
+            "gas_cost": gas_cost,
+            "company_invoice_cost": company_invoice_cost,
             "total_cost": total_cost,
             "gross_margin": gross_margin,
         },
@@ -207,6 +275,9 @@ def refresh_villa_year(house, year):
             "program_revenue",
             "employee_cost",
             "invoice_expenses",
+            "ika_cost",
+            "gas_cost",
+            "company_invoice_cost",
         ],
     )
 
@@ -217,7 +288,7 @@ def refresh_villa_year(house, year):
 
     # Yearly cost includes employee costs AND invoices.
     total_cost = money(
-        totals["employee_cost"] + totals["invoice_expenses"]
+        totals["employee_cost"] + totals["ika_cost"] + totals["gas_cost"] + totals["company_invoice_cost"]
     )
 
     # Gross margin is revenue minus all costs.
@@ -338,7 +409,9 @@ def refresh_department_month(
     # Keep them visible, but do not include them in department costs
     # or subtract them from gross margin.
     total_revenue = work_revenue
-    total_cost = employee_cost
+    ika_cost, gas_cost = allocated_employee_expenses(year, month, house=house, department=department)
+    company_invoice_cost = money(company_invoice_queryset(invoice_queryset).aggregate(v=Sum("amount"))["v"])
+    total_cost = employee_cost + ika_cost + gas_cost + company_invoice_cost
     gross_margin = money(total_revenue - total_cost)
 
     summary, created = DepartmentFinancialSummary.objects.update_or_create(
@@ -350,6 +423,9 @@ def refresh_department_month(
             "work_revenue": work_revenue,
             "employee_cost": employee_cost,
             "invoice_expenses": invoice_expenses,
+            "ika_cost": ika_cost,
+            "gas_cost": gas_cost,
+            "company_invoice_cost": company_invoice_cost,
             "total_revenue": total_revenue,
             "total_cost": total_cost,
             "gross_margin": gross_margin,
@@ -368,6 +444,8 @@ def refresh_department_year(
     year,
     house=None,
 ):
+    for month in range(1, 13):
+        refresh_department_month(department, year, month, house=house)
     monthly_records = DepartmentFinancialSummary.objects.filter(
         department=department,
         house=house,
@@ -381,6 +459,9 @@ def refresh_department_year(
             "work_revenue",
             "employee_cost",
             "invoice_expenses",
+            "ika_cost",
+            "gas_cost",
+            "company_invoice_cost",
         ],
     )
 
@@ -388,7 +469,7 @@ def refresh_department_year(
     # They remain visible in the summary but are excluded from costs
     # and gross margin.
     total_revenue = totals["work_revenue"]
-    total_cost = totals["employee_cost"]
+    total_cost = totals["employee_cost"] + totals["ika_cost"] + totals["gas_cost"] + totals["company_invoice_cost"]
     gross_margin = money(total_revenue - total_cost)
 
     summary, created = DepartmentFinancialSummary.objects.update_or_create(
@@ -443,6 +524,11 @@ def rebuild_department_financial_summaries(department):
         )
         if value is not None
     ]
+
+    for model, field in [(IKA, "start_date"), (Company_Gas, "date")]:
+        first = model.objects.filter(employee__department=department).aggregate(v=Min(field))["v"]
+        if first:
+            possible_starts.append(first)
 
     if not possible_starts:
         return
@@ -588,3 +674,4 @@ def compare_house_water_costs(house):
         ),
         "note": "Historical whole-volume comparison only. Progressive switching decisions must compare marginal costs; actual bill fees and tanker minimum delivery costs may differ.",
     }
+

@@ -3,12 +3,14 @@ from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
+from .views import CompanyGasViewSet
 
 from rest_framework_simplejwt.views import (
     TokenObtainPairView,
     TokenRefreshView,
 )
 
+from .views import ImportantJobReminderViewSet
 from .views import (
     CustomerViewSet,
     HouseViewSet,
@@ -121,6 +123,18 @@ router.register(
     "water-tank-readings",
     HouseWaterTankReadingViewSet,
     basename="water-tank-readings",
+)
+
+router.register(
+    r"important-job-reminders",
+    ImportantJobReminderViewSet,
+    basename="important-job-reminders",
+)
+
+router.register(
+    r"company-gas",
+    CompanyGasViewSet,
+    basename="company-gas",
 )
 
 

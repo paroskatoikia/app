@@ -58,6 +58,17 @@ def _vat_parts(value):
 
 
 
+def _work_rows(w):
+    """Keep each purchase row attached to its parent work entry."""
+    rows = [(w.work_date.isoformat(), w.house.name, w.service.name,
+             f'{D(w.hours):,.0f} hours', w.description or '—', EURO(w.customer_charge))]
+    if D(w.additional_charges) != 0:
+        rows.append(('', '', 'Additional charges', '',
+                     w.additional_charges_notes or 'Materials / purchases',
+                     EURO(w.additional_charges)))
+    return rows
+
+
 def _safe(value):
     s = unicodedata.normalize('NFKC', str(value or 'UNKNOWN'))
     s = re.sub(r'[^\w.\-]+', '_', s, flags=re.UNICODE).strip('._')
@@ -217,10 +228,11 @@ def _build_pdf(customer, villas, works, invoices, programs, payments, today):
              Paragraph(f'Prepared {today:%d %B %Y}  |  All amounts in EUR  |  Through {today:%d %B %Y}', muted)]
 
     work_total = sum((D(w.customer_charge) for w in works), Decimal('0'))
+    additional_total = sum((D(w.additional_charges) for w in works), Decimal('0'))
     invoice_total = sum((D(i.amount) for i in invoices), Decimal('0'))
     program_total = sum((D(p.price) * _month_count(p, today) for p in programs), Decimal('0'))
     paid = sum((D(p.amount) for p in payments), Decimal('0'))
-    charges = work_total + invoice_total + program_total
+    charges = work_total + additional_total + invoice_total + program_total
     balance = charges - paid
     counts = len(works)
     story.append(Paragraph('AT A GLANCE', h2))
@@ -232,7 +244,7 @@ def _build_pdf(customer, villas, works, invoices, programs, payments, today):
     story.extend([t, Spacer(1, 10)])
     story.append(Paragraph(
         f'This statement covers <b>{len(villas)} villa(s)</b> and <b>{counts} recorded work entries</b>. '
-        f'Work services contributed <b>{EURO(work_total)}</b>; villa-linked supplier invoices '
+        f'Work services contributed <b>{EURO(work_total)}</b>; additional charges <b>{EURO(additional_total)}</b>; villa-linked supplier invoices '
         f'contributed <b>{EURO(invoice_total)}</b>; and dated monthly villa programs '
         f'contributed <b>{EURO(program_total)}</b>. Payments received total <b>{EURO(paid)}</b>. '
         + (f'The remaining balance is <b>{EURO(balance)}</b>.' if balance >= 0 else f'The account has a credit of <b>{EURO(-balance)}</b>.'), body))
@@ -240,8 +252,8 @@ def _build_pdf(customer, villas, works, invoices, programs, payments, today):
     dept_totals = defaultdict(Decimal)
     villa_totals = defaultdict(Decimal)
     for w in works:
-        dept_totals[w.service.department.name if w.service.department_id else 'Unassigned'] += D(w.customer_charge)
-        villa_totals[w.house.name] += D(w.customer_charge)
+        dept_totals[w.service.department.name if w.service.department_id else 'Unassigned'] += D(w.customer_charge) + D(w.additional_charges)
+        villa_totals[w.house.name] += D(w.customer_charge) + D(w.additional_charges)
     for inv in invoices:
         dept_totals[inv.department.name if inv.department_id else 'Unassigned'] += D(inv.amount)
         villa_totals[inv.house.name] += D(inv.amount)
@@ -260,7 +272,7 @@ def _build_pdf(customer, villas, works, invoices, programs, payments, today):
     def tabular(headers, rows, widths):
         table_data = [[Paragraph(str(h), ParagraphStyle('head', parent=small, fontName=bold, textColor=colors.white)) for h in headers]]
         for row in rows:
-            table_data.append([Paragraph(str(cell).replace('&', '&amp;').replace('<', '&lt;'), small) for cell in row])
+            table_data.append([Paragraph(escape(str(cell)).replace('\n', '<br/>'), small) for cell in row])
         if len(table_data) == 1:
             table_data.append([Paragraph('No records', small)] + [''] * (len(headers) - 1))
         tab = Table(table_data, colWidths=widths, repeatRows=1, hAlign='LEFT')
@@ -275,9 +287,8 @@ def _build_pdf(customer, villas, works, invoices, programs, payments, today):
         return tab
 
     story.append(Paragraph('DETAILED WORK STATEMENT', h2))
-    story.append(Paragraph('Each row uses the historical customer-charge snapshot stored with the work entry.', muted))
-    work_rows = [(w.work_date.isoformat(), w.house.name, w.service.name,
-                  f'{D(w.hours):,.0f} hours', w.description or '—', EURO(w.customer_charge)) for w in works]
+    story.append(Paragraph('Work rows use historical customer-charge snapshots; additional purchases appear immediately below their work entry.', muted))
+    work_rows = [row for w in works for row in _work_rows(w)]
     story.append(tabular(['Date', 'Villa', 'Service', 'Hours', 'Work performed', 'Charge'],
                          work_rows, [64, 75, 88, 43, 120, 91]))
 
@@ -300,7 +311,7 @@ def _build_pdf(customer, villas, works, invoices, programs, payments, today):
     pay_rows = [(p.payment_date.isoformat(), p.reference or '—', p.notes or '—', EURO(p.amount)) for p in payments]
     story.append(tabular(['Date', 'Reference', 'Notes', 'Amount'], pay_rows, [84, 112, 190, 95]))
     story.extend([Spacer(1, 18), Paragraph('NOTES ON THIS STATEMENT', h2),
-                  Paragraph('Balances are calculated as recorded work charges + villa-linked supplier invoices + dated monthly villa programs - customer payments. '
+                  Paragraph('Balances are calculated as recorded work charges + additional charges + villa-linked supplier invoices + dated monthly villa programs - customer payments. '
                             'Payments are account-level and are not assigned to individual work entries or invoices. '
                             'Future-dated entries are excluded. The attached invoices are supporting source documents, not proof of payment. '
                             'This is a management statement, not a tax invoice.', muted)])
@@ -352,6 +363,7 @@ def _build_monthly_pdf(customer, villas, works, invoices, programs, payments, to
     ]
 
     work_total = sum((D(w.customer_charge) for w in works), Decimal('0'))
+    additional_total = sum((D(w.additional_charges) for w in works), Decimal('0'))
     invoice_total = sum((D(i.amount) for i in invoices), Decimal('0'))
     program_items = [(p, D(p.price)) for p in programs
                      if p.start_date and p.start_date <= today
@@ -361,7 +373,7 @@ def _build_monthly_pdf(customer, villas, works, invoices, programs, payments, to
     # Supplier invoices are pass-through amounts: do not apply VAT again.
     taxable_charges = work_total + program_total
     net_charges, vat_charges, gross_taxable_charges = _vat_parts(taxable_charges)
-    gross_charges = gross_taxable_charges + invoice_total
+    gross_charges = gross_taxable_charges + additional_total + invoice_total
     # Opening balance already includes historical VAT using the same convention.
     closing = opening_balance + gross_charges - paid
 
@@ -370,7 +382,7 @@ def _build_monthly_pdf(customer, villas, works, invoices, programs, payments, to
                                     textColor=colors.white)
         table_data = [[Paragraph(escape(str(h)), head_style) for h in headers]]
         for row in rows:
-            table_data.append([Paragraph(escape(str(cell)), small) for cell in row])
+            table_data.append([Paragraph(escape(str(cell)).replace('\n', '<br/>'), small) for cell in row])
         if len(table_data) == 1:
             table_data.append([Paragraph('No records', small)] + [''] * (len(headers) - 1))
         tab = Table(table_data, colWidths=widths, repeatRows=1, hAlign='LEFT')
@@ -406,7 +418,7 @@ def _build_monthly_pdf(customer, villas, works, invoices, programs, payments, to
     if len(villas) > 1:
         villa_totals = defaultdict(lambda: Decimal('0'))
         for w in works:
-            villa_totals[w.house.name] += D(w.customer_charge)
+            villa_totals[w.house.name] += D(w.customer_charge) + D(w.additional_charges)
         for i in invoices:
             villa_totals[i.house.name] += D(i.amount)
         for p, value in program_items:
@@ -429,25 +441,22 @@ def _build_monthly_pdf(customer, villas, works, invoices, programs, payments, to
                'Recurring monthly fee', EURO(value))
         rows.append(row if show_villa else (row[0], *row[2:]))
     program_row_count = len(rows)
-    activity_rows = []
-    for w in works:
-        activity_rows.append((w.work_date.isoformat(), w.house.name, w.service.name,
-                              f'{D(w.hours):,.0f} hours', w.description or '—',
-                              EURO(w.customer_charge)))
-    activity_rows.extend(check_activities or [])
-    # Show all visits in date order, including repeated visits to the same villa.
-    for row in sorted(activity_rows, key=lambda item: (item[0], item[1], item[2])):
-        rows.append(row if show_villa else (row[0], *row[2:]))
+    activity_groups = [_work_rows(w) for w in works]
+    activity_groups.extend([row] for row in (check_activities or []))
+    # Sort parent entries, then append their purchase rows without re-sorting.
+    for group in sorted(activity_groups, key=lambda g: (g[0][0], g[0][1], g[0][2])):
+        for row in group:
+            rows.append(row if show_villa else (row[0], *row[2:]))
     # Program rows use light grey; a ruled footer separates totals from entries.
     entry_total = program_total + work_total
     entry_net, entry_vat, entry_gross = _vat_parts(entry_total)
     if show_villa:
         rows.extend([
-            ('SUBTOTAL', '', '', '', '', EURO(entry_net)),
+            ('SUBTOTAL', '', '', '', '', EURO(entry_net + additional_total)),
             (f'VAT {VAT_RATE:.0%}', '', '', '', '', EURO(entry_vat)),
             ('PREVIOUS AMOUNT', '', '', '', '', EURO(opening_balance)),
             ('PAYMENTS THIS MONTH (-)', '', '', '', '', EURO(-paid)),
-            ('TOTAL', '', '', '', '', EURO(opening_balance + entry_gross - paid)),
+            ('TOTAL', '', '', '', '', EURO(opening_balance + entry_gross + additional_total - paid)),
         ])
         story.append(tabular(['Period / Date', 'Villa', 'Service / Monthly Fee', 'Units',
                               'Work performed', 'Charge'],
@@ -455,11 +464,11 @@ def _build_monthly_pdf(customer, villas, works, invoices, programs, payments, to
                              highlighted_rows=range(1, program_row_count + 1)))
     else:
         rows.extend([
-            ('SUBTOTAL', '', '', '', EURO(entry_net)),
+            ('SUBTOTAL', '', '', '', EURO(entry_net + additional_total)),
             (f'VAT {VAT_RATE:.0%}', '', '', '', EURO(entry_vat)),
             ('PREVIOUS AMOUNT', '', '', '', EURO(opening_balance)),
             ('PAYMENTS THIS MONTH (-)', '', '', '', EURO(-paid)),
-            ('TOTAL', '', '', '', EURO(opening_balance + entry_gross - paid)),
+            ('TOTAL', '', '', '', EURO(opening_balance + entry_gross + additional_total - paid)),
         ])
         story.append(tabular(['Period / Date', 'Service / Monthly Fee', 'Units',
                               'Work performed', 'Charge'],
@@ -472,6 +481,8 @@ def _build_monthly_pdf(customer, villas, works, invoices, programs, payments, to
          Paragraph('MONTHLY CHARGES', muted)],
         [Paragraph(EURO(opening_balance), body),
          Paragraph(EURO(gross_charges), body)],
+        [Paragraph('ADDITIONAL CHARGES (included above)', muted), Paragraph('', muted)],
+        [Paragraph(EURO(additional_total), body), Paragraph('', body)],
         [Paragraph('SUPPLIER INVOICES TOTAL', muted),
          Paragraph('INVOICES THIS MONTH', muted)],
         [Paragraph(EURO(invoice_total), body),
@@ -492,7 +503,7 @@ def _build_monthly_pdf(customer, villas, works, invoices, programs, payments, to
     story.extend([t, Spacer(1, 12)])
     story.append(Paragraph(
         f'In {period_label}, villa programs contributed <b>{EURO(program_total)}</b>, '
-        f'work services <b>{EURO(work_total)}</b>, and villa-linked supplier invoices '
+        f'work services <b>{EURO(work_total)}</b>, additional charges <b>{EURO(additional_total)}</b>, and villa-linked supplier invoices '
         f'<b>{EURO(invoice_total)}</b> with no additional VAT. VAT on monthly fees and services is '
         f'<b>{EURO(vat_charges)}</b>. Payments recorded in the month were '
         f'<b>{EURO(paid)}</b>; the closing account balance is <b>{EURO(closing)}</b>' + (' (credit).' if closing < 0 else '.'), body))
@@ -506,7 +517,7 @@ def _build_monthly_pdf(customer, villas, works, invoices, programs, payments, to
         'specific invoices or work entries. Programs are charged in full for '
         'each overlapping month, without proration. Programs without a start '
         'date are excluded. VAT applies to monthly fees and services only; '
-        'supplier invoices are included at their recorded amounts without additional VAT. '
+        'supplier invoices and additional charges are included at their recorded amounts without additional VAT. '
         'This is a management statement, not a tax invoice.', muted))
     doc.build(story)
     return buffer.getvalue()
@@ -559,6 +570,9 @@ def export_customer_statement(customer, month=None):
     old_work = WorkEntry.objects.filter(
         house_id__in=villa_ids, work_date__lt=start
     ).values_list('customer_charge', flat=True)
+    old_additional = WorkEntry.objects.filter(
+        house_id__in=villa_ids, work_date__lt=start
+    ).values_list('additional_charges', flat=True)
     old_invoices = Invoice.objects.filter(
         house_id__in=villa_ids, invoice_date__lt=start
     ).values_list('amount', flat=True)
@@ -577,6 +591,7 @@ def export_customer_statement(customer, month=None):
     opening_balance = (
         _vat_parts(historical_taxable_charges)[2]
         + historical_invoice_total
+        + sum((D(v) for v in old_additional), Decimal('0'))
         - sum((D(v) for v in old_payments), Decimal('0'))
     )
 

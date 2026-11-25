@@ -26,6 +26,8 @@ from .models import (
     ServiceCategory,
     VillaServicePrice,
     Employee,
+    IKA,
+    Company_Gas,
     WorkEntry,
     Invoice,
     DepartmentCost,
@@ -171,6 +173,7 @@ class CustomerAdmin(admin.ModelAdmin):
 
         Charges:
         - WorkEntry.customer_charge
+        - WorkEntry.additional_charges
         - VillaProgram monthly price
         - Villa-assigned supplier invoices
 
@@ -182,7 +185,7 @@ class CustomerAdmin(admin.ModelAdmin):
 
         today = timezone.localdate()
 
-        houses = list(customer.villas.all())
+        houses = list(customer.villas.filter(is_company_property=False))
 
         house_ids = [
             house.pk
@@ -197,10 +200,12 @@ class CustomerAdmin(admin.ModelAdmin):
             house_id__in=house_ids,
             work_date__lte=today,
         ).aggregate(
-            total=Sum("customer_charge")
+            total=Sum("customer_charge"),
+            additional=Sum("additional_charges"),
         )
 
         work_total = money(work_result["total"])
+        additional_total = money(work_result["additional"])
 
         # ------------------------------------------
         # REIMBURSABLE INVOICES
@@ -324,6 +329,7 @@ class CustomerAdmin(admin.ModelAdmin):
 
         total_charges = money(
             work_total
+            + additional_total
             + program_total
             + invoice_total
         )
@@ -338,6 +344,7 @@ class CustomerAdmin(admin.ModelAdmin):
 
         return {
             "work": work_total,
+            "additional": additional_total,
             "programs": program_total,
             "invoices": invoice_total,
             "charges": total_charges,
@@ -392,6 +399,7 @@ class CustomerAdmin(admin.ModelAdmin):
             "<h3>Charges</h3>"
 
             "<p>Work charges: <strong>€{}</strong></p>"
+            "<p>Additional charges: <strong>€{}</strong></p>"
 
             "<p>BP / Gardening / Pool: "
             "<strong>€{}</strong></p>"
@@ -424,6 +432,7 @@ class CustomerAdmin(admin.ModelAdmin):
             obj.name,
             totals["villa_count"],
             f"{totals['work']:,.2f}",
+            f"{totals['additional']:,.2f}",
             f"{totals['programs']:,.2f}",
             f"{totals['invoices']:,.2f}",
             f"{totals['charges']:,.2f}",
@@ -469,6 +478,9 @@ class VillaFinancialSummaryInline(admin.TabularInline):
         "total_revenue",
         "employee_cost",
         "invoice_expenses",
+        "company_invoice_cost",
+        "ika_cost",
+        "gas_cost",
         "total_cost",
         "gross_margin",
     )
@@ -494,6 +506,9 @@ class DepartmentFinancialSummaryInline(admin.TabularInline):
         "work_revenue",
         "employee_cost",
         "invoice_expenses",
+        "company_invoice_cost",
+        "ika_cost",
+        "gas_cost",
         "total_cost",
         "gross_margin",
     )
@@ -543,9 +558,10 @@ class VillaAdmin(admin.ModelAdmin):
         "name",
         "customer",
         "area",
+        "is_company_property",
     )
 
-    list_filter = ("area",)
+    list_filter = ("area", "is_company_property")
 
     search_fields = (
         "name",
@@ -570,6 +586,7 @@ class VillaAdmin(admin.ModelAdmin):
                 "fields": (
                     "name",
                     "customer",
+                    "is_company_property",
                     "area",
                     "description",
                 )
@@ -673,8 +690,34 @@ class VillaServicePriceAdmin(admin.ModelAdmin):
 # EMPLOYEE ADMIN
 # ==================================================
 
+class IKAInline(admin.TabularInline):
+    model = IKA
+    extra = 0
+
+
+class CompanyGasInline(admin.TabularInline):
+    model = Company_Gas
+    extra = 0
+
+
+@admin.register(IKA)
+class IKAAdmin(admin.ModelAdmin):
+    list_display = ("employee", "insurance_hours", "monthly_cost", "start_date", "end_date")
+    list_filter = ("insurance_hours", "start_date", "employee")
+    search_fields = ("employee__first_name", "employee__last_name", "notes")
+
+
+@admin.register(Company_Gas)
+class CompanyGasAdmin(admin.ModelAdmin):
+    list_display = ("employee", "gas_type", "price_total", "date", "invoice_pdf")
+    list_filter = ("gas_type", "date", "employee")
+    date_hierarchy = "date"
+    search_fields = ("employee__first_name", "employee__last_name", "notes")
+
+
 @admin.register(Employee)
 class EmployeeAdmin(admin.ModelAdmin):
+    inlines = [IKAInline, CompanyGasInline]
 
     list_display = (
         "first_name",
@@ -748,6 +791,8 @@ class WorkEntryAdmin(admin.ModelAdmin):
         "hours",
         "customer_hourly_rate_snapshot",
         "customer_charge",
+        "additional_charges",
+        "total_customer_charge_display",
         "employee_cost",
         "total_company_cost_display",
         "gross_margin",
@@ -766,6 +811,7 @@ class WorkEntryAdmin(admin.ModelAdmin):
         "employee__last_name",
         "house__name",
         "description",
+        "additional_charges_notes",
     )
 
     date_hierarchy = "work_date"
@@ -776,8 +822,29 @@ class WorkEntryAdmin(admin.ModelAdmin):
         "employee_cost",
         "customer_hourly_rate_snapshot",
         "customer_charge",
+        "total_customer_charge_display",
         "created_at",
     )
+
+    fieldsets = (
+        ("Work information", {"fields": (
+            "employee", "house", "service", "work_date", "hours", "description",
+        )}),
+        ("Additional charges", {"fields": (
+            "additional_charges", "additional_charges_notes",
+        )}),
+        ("Financial information", {"fields": (
+            "customer_hourly_rate_snapshot", "customer_charge",
+            "total_customer_charge_display", "employee_salary_type_snapshot",
+            "employee_rate_snapshot", "employee_cost", "created_at",
+        )}),
+    )
+
+    @admin.display(description="Total customer charge")
+    def total_customer_charge_display(self, obj):
+        if not obj or not obj.pk:
+            return "Calculated after saving"
+        return f"€{obj.total_customer_charge:,.2f}"
 
     @admin.display(description="Total company cost")
     def total_company_cost_display(self, obj):
@@ -1158,3 +1225,180 @@ class HouseInspectionAdmin(admin.ModelAdmin):
 
     date_hierarchy = "inspection_date"
     ordering = ("-inspection_date",)
+
+
+
+
+from django.utils.html import format_html
+from .models import ImportantJobReminder
+
+
+@admin.register(ImportantJobReminder)
+class ImportantJobReminderAdmin(admin.ModelAdmin):
+
+    list_display = (
+        "deadline",
+        "customer",
+        "description",
+        "procedure_days",
+        "days_remaining",
+        "recommended_start_date",
+        "importance_display",
+        "completed",
+    )
+
+    list_editable = (
+        "completed",
+    )
+
+    list_filter = (
+        "completed",
+        "deadline",
+        "customer",
+    )
+
+    search_fields = (
+        "description",
+        "customer__name",
+    )
+
+    ordering = (
+        "completed",
+        "deadline",
+    )
+
+    date_hierarchy = "deadline"
+
+    list_per_page = 50
+
+    readonly_fields = (
+        "days_remaining",
+        "recommended_start_date",
+        "latest_start_date",
+        "spare_days",
+        "importance_display",
+        "completed_at",
+        "last_notification_level",
+        "last_notification_at",
+        "created_at",
+        "updated_at",
+    )
+
+    fieldsets = (
+        (
+            "Job information",
+            {
+                "fields": (
+                    "customer",
+                    "description",
+                    "deadline",
+                    "procedure_days",
+                )
+            },
+        ),
+        (
+            "Importance and schedule",
+            {
+                "fields": (
+                    "importance_display",
+                    "days_remaining",
+                    "recommended_start_date",
+                    "latest_start_date",
+                    "spare_days",
+                )
+            },
+        ),
+        (
+            "Completion",
+            {
+                "fields": (
+                    "completed",
+                    "completed_at",
+                )
+            },
+        ),
+        (
+            "Email notifications",
+            {
+                "fields": (
+                    "last_notification_level",
+                    "last_notification_at",
+                )
+            },
+        ),
+        (
+            "History",
+            {
+                "fields": (
+                    "created_at",
+                    "updated_at",
+                ),
+                "classes": ("collapse",),
+            },
+        ),
+    )
+
+    actions = [
+        "mark_completed",
+        "mark_pending",
+    ]
+
+    @admin.display(description="Importance")
+    def importance_display(self, obj):
+
+        if not obj or not obj.deadline or not obj.procedure_days:
+            return "Calculated after saving"
+
+        colors = {
+            "normal": "#16a34a",
+            "important": "#ca8a04",
+            "urgent": "#ea580c",
+            "critical": "#dc2626",
+            "overdue": "#991b1b",
+            "completed": "#64748b",
+        }
+
+        level = obj.importance
+
+        return format_html(
+            '<span style="background:{};'
+            'color:white;padding:5px 10px;'
+            'border-radius:5px;font-weight:bold;">'
+            '{}</span>',
+            colors.get(level, "#64748b"),
+            level.upper(),
+        )
+
+    @admin.action(
+        description="Mark selected jobs as completed"
+    )
+    def mark_completed(self, request, queryset):
+
+        count = 0
+
+        for job in queryset.filter(completed=False):
+            job.completed = True
+            job.save()
+            count += 1
+
+        self.message_user(
+            request,
+            f"{count} jobs completed.",
+        )
+
+    @admin.action(
+        description="Reopen selected jobs"
+    )
+    def mark_pending(self, request, queryset):
+
+        count = 0
+
+        for job in queryset.filter(completed=True):
+            job.completed = False
+            job.save()
+            count += 1
+
+        self.message_user(
+            request,
+            f"{count} jobs reopened.",
+        )

@@ -1,7 +1,7 @@
 from decimal import Decimal
 
 from django.core.exceptions import ValidationError
-from django.core.validators import MinValueValidator
+from django.core.validators import MinValueValidator, FileExtensionValidator
 from django.db import models
 
 import os
@@ -38,9 +38,18 @@ class House(models.Model):
 
 
     customer = models.ForeignKey(
-        Customer, on_delete=models.PROTECT, related_name="villas"
+        Customer, on_delete=models.PROTECT, related_name="villas", null=True, blank=True
     )
     name = models.CharField(max_length=200)
+
+    is_company_property = models.BooleanField(default=False, help_text="Invoices for this property are company expenses.")
+
+    def clean(self):
+        super().clean()
+        if not self.is_company_property and not self.customer_id:
+            raise ValidationError({"customer": "A customer is required for customer villas."})
+        if self.is_company_property and self.customer_id:
+            raise ValidationError({"customer": "Company properties must not have a customer."})
 
     area = models.CharField(max_length=100, blank=True)
     description = models.TextField(blank=True)
@@ -699,6 +708,60 @@ class Employee(models.Model):
         return hours * hourly_cost
 
 
+class IKA(models.Model):
+    employee = models.ForeignKey(Employee, on_delete=models.PROTECT, related_name="ika_records")
+    insurance_hours = models.PositiveSmallIntegerField(choices=[(4, "4 hours"), (8, "8 hours")], default=4)
+    monthly_cost = models.DecimalField(max_digits=12, decimal_places=2, validators=MONEY_VALIDATORS, help_text="Employer contribution only; exclude amounts already counted in wages.")
+    start_date = models.DateField(help_text="First day of the first insured month.")
+    end_date = models.DateField(null=True, blank=True, help_text="Last day of the final insured month; blank means ongoing.")
+    notes = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ["-start_date", "employee"]
+        verbose_name = "IKA"
+        verbose_name_plural = "IKA"
+
+    def clean(self):
+        from calendar import monthrange
+        super().clean()
+        if not self.start_date:
+            return
+        if self.start_date.day != 1:
+            raise ValidationError({"start_date": "Use the first day of the month."})
+        if self.end_date and (self.end_date < self.start_date or self.end_date.day != monthrange(self.end_date.year, self.end_date.month)[1]):
+            raise ValidationError({"end_date": "Use the last day of a month on or after the start date."})
+        if self.employee_id:
+            qs = IKA.objects.filter(employee_id=self.employee_id).exclude(pk=self.pk).filter(models.Q(end_date__isnull=True) | models.Q(end_date__gte=self.start_date))
+            if self.end_date:
+                qs = qs.filter(start_date__lte=self.end_date)
+            if qs.exists():
+                raise ValidationError("IKA periods cannot overlap for the same employee.")
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"{self.employee} - IKA - {self.start_date}"
+
+
+class Company_Gas(models.Model):
+    employee = models.ForeignKey(Employee, on_delete=models.PROTECT, related_name="gas_records")
+    gas_type = models.CharField(max_length=20, choices=[("petrol", "Petrol (Unleaded)"), ("diesel", "Diesel"), ("lpg", "LPG"), ("other", "Other")])
+    price_total = models.DecimalField(max_digits=12, decimal_places=2, validators=MONEY_VALIDATORS)
+    date = models.DateField()
+    invoice_pdf = models.FileField(upload_to="company_gas/%Y/%m/", blank=True, validators=[FileExtensionValidator(["pdf"])])
+    notes = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ["-date"]
+        verbose_name = "Company Gas"
+        verbose_name_plural = "Company Gas"
+
+    def __str__(self):
+        return f"{self.employee} - {self.date} - {self.price_total} EUR"
+
+
 class WorkEntry(models.Model):
     """Daily work record with separate historical cost and revenue snapshots."""
 
@@ -724,6 +787,20 @@ class WorkEntry(models.Model):
     )
 
     description = models.TextField(blank=True)
+
+    additional_charges = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=Decimal("0.00"),
+        validators=MONEY_VALIDATORS,
+        verbose_name="Additional charges (€)",
+    )
+
+    additional_charges_notes = models.TextField(
+        blank=True,
+        verbose_name="Additional charges notes",
+        help_text="Enter purchased items, supplier names and other details.",
+    )
 
     # Employee-cost snapshot: what the company pays for this employee's work.
     employee_salary_type_snapshot = models.CharField(
@@ -813,6 +890,10 @@ class WorkEntry(models.Model):
         )
 
         super().save(*args, **kwargs)
+
+    @property
+    def total_customer_charge(self):
+        return self.customer_charge + self.additional_charges
 
     @property
     def total_company_cost(self):
@@ -1086,6 +1167,10 @@ class VillaFinancialSummary(models.Model):
         default=Decimal("0.00"),
     )
 
+    ika_cost = models.DecimalField(max_digits=14, decimal_places=2, default=Decimal("0.00"))
+    gas_cost = models.DecimalField(max_digits=14, decimal_places=2, default=Decimal("0.00"))
+    company_invoice_cost = models.DecimalField(max_digits=14, decimal_places=2, default=Decimal("0.00"))
+
     # Final totals
     total_revenue = models.DecimalField(
         max_digits=14,
@@ -1126,9 +1211,9 @@ class VillaFinancialSummary(models.Model):
             self.work_revenue + self.program_revenue
         )
 
-        # Costs include employee costs and invoice expenses.
+        # Costs exclude customer-reimbursed invoices.
         self.total_cost = (
-            self.employee_cost + self.invoice_expenses
+            self.employee_cost + self.ika_cost + self.gas_cost + self.company_invoice_cost
         )
 
         # Gross margin is revenue minus all costs.
@@ -1201,6 +1286,10 @@ class DepartmentFinancialSummary(models.Model):
         default=Decimal("0.00"),
     )
 
+    ika_cost = models.DecimalField(max_digits=14, decimal_places=2, default=Decimal("0.00"))
+    gas_cost = models.DecimalField(max_digits=14, decimal_places=2, default=Decimal("0.00"))
+    company_invoice_cost = models.DecimalField(max_digits=14, decimal_places=2, default=Decimal("0.00"))
+
     # Final totals
     total_revenue = models.DecimalField(
         max_digits=14,
@@ -1254,11 +1343,10 @@ class DepartmentFinancialSummary(models.Model):
         # Department revenue comes only from completed work.
         self.total_revenue = self.work_revenue
 
-        # Invoice expenses are displayed separately.
-        # They are reimbursed by the customer and do not reduce margin.
-        self.total_cost = self.employee_cost
+        # Only company invoices reduce margin.
+        self.total_cost = self.employee_cost + self.ika_cost + self.gas_cost + self.company_invoice_cost
 
-        # Department gross margin excludes invoice expenses.
+        # Department gross margin includes company expenses.
         self.gross_margin = self.total_revenue - self.total_cost
 
     def save(self, *args, **kwargs):
@@ -1382,3 +1470,210 @@ class HouseInspection(models.Model):
         )
 
 
+from datetime import timedelta
+from django.core.validators import MinValueValidator
+from django.utils import timezone
+
+
+class ImportantJobReminder(models.Model):
+
+    class Importance(models.TextChoices):
+        NORMAL = "normal", "Normal"
+        IMPORTANT = "important", "Important"
+        URGENT = "urgent", "Urgent"
+        CRITICAL = "critical", "Critical"
+        OVERDUE = "overdue", "Overdue"
+        COMPLETED = "completed", "Completed"
+
+    customer = models.ForeignKey(
+        Customer,
+        on_delete=models.PROTECT,
+        related_name="important_job_reminders",
+    )
+
+    description = models.TextField()
+
+    deadline = models.DateField(
+        db_index=True,
+    )
+
+    procedure_days = models.PositiveIntegerField(
+        default=1,
+        validators=[MinValueValidator(1)],
+        verbose_name="Procedure duration (days)",
+    )
+
+    completed = models.BooleanField(
+        default=False,
+        db_index=True,
+    )
+
+    completed_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        editable=False,
+    )
+
+    last_notification_level = models.CharField(
+        max_length=20,
+        blank=True,
+        default="",
+        editable=False,
+    )
+
+    last_notification_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        editable=False,
+    )
+
+    created_at = models.DateTimeField(
+        auto_now_add=True,
+    )
+
+    updated_at = models.DateTimeField(
+        auto_now=True,
+    )
+
+    class Meta:
+        ordering = ["deadline", "id"]
+        verbose_name = "Important Job Reminder"
+        verbose_name_plural = "Important Job Reminders"
+
+    def __str__(self):
+        return f"{self.customer} - {self.deadline}"
+
+    @property
+    def days_remaining(self):
+        if self.deadline is None:
+            return None
+        return (
+            self.deadline - timezone.localdate()
+        ).days
+
+    @property
+    def notification_days(self):
+        return (self.procedure_days or 0) * 1.5
+
+    @property
+    def recommended_start_date(self):
+        if self.deadline is None or not self.procedure_days:
+            return None
+        return self.deadline - timedelta(
+            days=int(self.notification_days)
+        )
+
+    @property
+    def latest_start_date(self):
+        if self.deadline is None or not self.procedure_days:
+            return None
+        return self.deadline - timedelta(
+            days=self.procedure_days
+        )
+
+    @property
+    def spare_days(self):
+        if self.days_remaining is None or not self.procedure_days:
+            return None
+        return self.days_remaining - self.procedure_days
+
+    @property
+    def is_overdue(self):
+        return (
+            not self.completed
+            and self.days_remaining is not None
+            and self.days_remaining < 0
+        )
+
+    @property
+    def importance(self):
+
+        if self.completed:
+            return self.Importance.COMPLETED
+
+        if self.deadline is None or not self.procedure_days:
+            return self.Importance.NORMAL
+
+        remaining = self.days_remaining
+        duration = self.procedure_days
+
+        if remaining < 0:
+            return self.Importance.OVERDUE
+
+        if remaining < duration:
+            return self.Importance.CRITICAL
+
+        if remaining == duration:
+            return self.Importance.URGENT
+
+        if remaining <= self.notification_days:
+            return self.Importance.IMPORTANT
+
+        return self.Importance.NORMAL
+
+    @property
+    def email_required(self):
+        return (
+            not self.completed
+            and self.days_remaining is not None
+            and bool(self.procedure_days)
+            and self.days_remaining <= self.notification_days
+        )
+
+    @property
+    def importance_score(self):
+
+        scores = {
+            self.Importance.COMPLETED: 0,
+            self.Importance.NORMAL: 1,
+            self.Importance.IMPORTANT: 2,
+            self.Importance.URGENT: 3,
+            self.Importance.CRITICAL: 4,
+            self.Importance.OVERDUE: 5,
+        }
+
+        return scores[self.importance]
+
+    def save(self, *args, **kwargs):
+
+        previous = None
+
+        if self.pk:
+            previous = (
+                type(self).objects
+                .filter(pk=self.pk)
+                .first()
+            )
+
+        if self.completed:
+
+            if not self.completed_at:
+                self.completed_at = timezone.now()
+
+        else:
+
+            self.completed_at = None
+
+            # Reset notifications if the job is reopened
+            # or its schedule changes.
+            if previous and (
+                previous.completed
+                or previous.deadline != self.deadline
+                or previous.procedure_days != self.procedure_days
+            ):
+                self.last_notification_level = ""
+                self.last_notification_at = None
+
+        update_fields = kwargs.get("update_fields")
+
+        if update_fields is not None:
+            kwargs["update_fields"] = set(
+                update_fields
+            ) | {
+                "completed_at",
+                "last_notification_level",
+                "last_notification_at",
+                "updated_at",
+            }
+
+        super().save(*args, **kwargs)

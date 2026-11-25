@@ -286,3 +286,225 @@ class HouseInspectionSerializer(serializers.ModelSerializer):
             )
 
         return value
+
+
+
+
+from rest_framework import serializers
+
+from .models import ImportantJobReminder
+
+
+class ImportantJobReminderSerializer(
+    serializers.ModelSerializer
+):
+
+    customer_name = serializers.StringRelatedField(
+        source="customer",
+        read_only=True,
+    )
+
+    days_remaining = serializers.IntegerField(
+        read_only=True,
+    )
+
+    spare_days = serializers.IntegerField(
+        read_only=True,
+    )
+
+    notification_days = serializers.FloatField(
+        read_only=True,
+    )
+
+    recommended_start_date = serializers.DateField(
+        read_only=True,
+    )
+
+    latest_start_date = serializers.DateField(
+        read_only=True,
+    )
+
+    importance = serializers.CharField(
+        read_only=True,
+    )
+
+    importance_score = serializers.IntegerField(
+        read_only=True,
+    )
+
+    email_required = serializers.BooleanField(
+        read_only=True,
+    )
+
+    is_overdue = serializers.BooleanField(
+        read_only=True,
+    )
+
+    class Meta:
+
+        model = ImportantJobReminder
+
+        fields = [
+            "id",
+            "customer",
+            "customer_name",
+            "description",
+            "deadline",
+            "procedure_days",
+            "days_remaining",
+            "spare_days",
+            "notification_days",
+            "recommended_start_date",
+            "latest_start_date",
+            "importance",
+            "importance_score",
+            "email_required",
+            "is_overdue",
+            "completed",
+            "completed_at",
+            "last_notification_level",
+            "last_notification_at",
+            "created_at",
+            "updated_at",
+        ]
+
+        read_only_fields = [
+            "completed_at",
+            "last_notification_level",
+            "last_notification_at",
+            "created_at",
+            "updated_at",
+        ]
+from .models import ImportantJobReminder
+
+
+class ImportantJobReminderSerializer(
+    serializers.ModelSerializer
+):
+
+    customer_name = serializers.StringRelatedField(
+        source="customer",
+        read_only=True,
+    )
+
+    days_remaining = serializers.IntegerField(
+        read_only=True,
+    )
+
+    spare_days = serializers.IntegerField(
+        read_only=True,
+    )
+
+    notification_days = serializers.FloatField(
+        read_only=True,
+    )
+
+    recommended_start_date = serializers.DateField(
+        read_only=True,
+    )
+
+    latest_start_date = serializers.DateField(
+        read_only=True,
+    )
+
+    importance = serializers.CharField(
+        read_only=True,
+    )
+
+    importance_score = serializers.IntegerField(
+        read_only=True,
+    )
+
+    email_required = serializers.BooleanField(
+        read_only=True,
+    )
+
+    is_overdue = serializers.BooleanField(
+        read_only=True,
+    )
+
+    class Meta:
+
+        model = ImportantJobReminder
+
+        fields = [
+            "id",
+            "customer",
+            "customer_name",
+            "description",
+            "deadline",
+            "procedure_days",
+            "days_remaining",
+            "spare_days",
+            "notification_days",
+            "recommended_start_date",
+            "latest_start_date",
+            "importance",
+            "importance_score",
+            "email_required",
+            "is_overdue",
+            "completed",
+            "completed_at",
+            "last_notification_level",
+            "last_notification_at",
+            "created_at",
+            "updated_at",
+        ]
+
+        read_only_fields = [
+            "completed_at",
+            "last_notification_level",
+            "last_notification_at",
+            "created_at",
+            "updated_at",
+        ]
+
+    from .models import Company_Gas
+    from rest_framework import serializers
+from rest_framework import serializers
+from .models import Company_Gas
+
+
+class CompanyGasSerializer(serializers.ModelSerializer):
+
+    employee_name = serializers.CharField(
+        source="employee.__str__",
+        read_only=True,
+    )
+
+    department_name = serializers.CharField(
+        source="employee.department.name",
+        read_only=True,
+    )
+
+    department_id = serializers.IntegerField(
+        source="employee.department_id",
+        read_only=True,
+    )
+
+    gas_type_display = serializers.CharField(
+        source="get_gas_type_display",
+        read_only=True,
+    )
+
+    class Meta:
+        model = Company_Gas
+
+        fields = [
+            "id",
+            "employee",
+            "employee_name",
+            "department_id",
+            "department_name",
+            "gas_type",
+            "gas_type_display",
+            "price_total",
+            "date",
+            "invoice_pdf",
+            "notes",
+        ]
+
+
+
+
+
