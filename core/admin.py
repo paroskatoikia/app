@@ -1,6 +1,8 @@
 from datetime import date
 from decimal import Decimal
 
+import nested_admin
+
 from django.contrib import admin, messages
 from django import forms
 from django.core.exceptions import ValidationError
@@ -103,7 +105,7 @@ class SupplierAdmin(admin.ModelAdmin):
 # VILLA PROGRAM INLINE
 # ==================================================
 
-class VillaProgramInline(admin.TabularInline):
+class VillaProgramInline(nested_admin.NestedTabularInline):
     model = VillaProgram
     extra = 1
 
@@ -464,7 +466,7 @@ def get_month_end(month_start):
 # VILLA FINANCIAL SUMMARY INLINE
 # ==================================================
 
-class VillaFinancialSummaryInline(admin.TabularInline):
+class VillaFinancialSummaryInline(nested_admin.NestedTabularInline):
     model = VillaFinancialSummary
 
     extra = 0
@@ -520,7 +522,7 @@ class DepartmentFinancialSummaryInline(admin.TabularInline):
 # VILLA SERVICE PRICE INLINE
 # ==================================================
 
-class VillaServicePriceInline(admin.TabularInline):
+class VillaServicePriceInline(nested_admin.NestedTabularInline):
     model = VillaServicePrice
     extra = 1
 
@@ -529,9 +531,16 @@ class VillaServicePriceInline(admin.TabularInline):
 # VILLA INFORMATION AND TANK INLINES
 # ==================================================
 
-class HouseInfoInline(admin.StackedInline):
+class VillaHouseTechnicianInline(nested_admin.NestedTabularInline):
+    model = HouseTechnician
+    extra = 1
+    fields = ("technician_type", "name", "phone", "company", "email", "is_primary", "notes")
+
+
+class HouseInfoInline(nested_admin.NestedStackedInline):
     model = HouseInfo
-    extra = 0
+    inlines = [VillaHouseTechnicianInline]
+    extra = 1
     max_num = 1
     can_delete = False
     fieldsets = (
@@ -541,7 +550,7 @@ class HouseInfoInline(admin.StackedInline):
     )
 
 
-class HouseWaterTankInline(admin.TabularInline):
+class HouseWaterTankInline(nested_admin.NestedTabularInline):
     model = HouseWaterTank
     extra = 0
     fields = ("name", "capacity_litres", "minimum_level_litres", "notes")
@@ -552,7 +561,7 @@ class HouseWaterTankInline(admin.TabularInline):
 # ==================================================
 
 @admin.register(House)
-class VillaAdmin(admin.ModelAdmin):
+class VillaAdmin(nested_admin.NestedModelAdmin):
 
     list_display = (
         "name",
@@ -572,8 +581,8 @@ class VillaAdmin(admin.ModelAdmin):
     inlines = [
         VillaProgramInline,
         VillaServicePriceInline,
-        VillaFinancialSummaryInline,
         HouseInfoInline,
+        VillaFinancialSummaryInline,
         HouseWaterTankInline,
     ]
 
