@@ -69,6 +69,8 @@ const greek = {
   "Expenses": "Έξοδα",
   "Gross profit": "Μικτό κέρδος",
   "Gross margin": "Μικτό περιθώριο",
+  "Reimbursable invoices": "Τιμολόγια προς αποζημίωση",
+  "Employee work costs + company invoices": "Κόστος εργασίας + εταιρικά τιμολόγια",
   "Employee cost": "Κόστος εργαζομένων",
   "Date": "Ημερομηνία",
   "Amount": "Ποσό",
@@ -942,6 +944,13 @@ function PerformancePage({
   );
 }
 
+// Match the backend invoice classification: unassigned or company-owned.
+function isCompanyInvoice(invoice, villas) {
+  const houseId = relationId(invoice.house ?? invoice.villa ?? invoice.house_id ?? invoice.villa_id);
+  if (houseId == null) return true;
+  return villas.find((villa) => String(villa.id) === String(houseId))?.is_company_property === true;
+}
+
 // Builds total income, outcome and net result for every villa.
 function buildVillaChart(villas, workEntries, programs, invoices) {
   const today = getTodayLocalDate();
@@ -956,6 +965,7 @@ function buildVillaChart(villas, workEntries, programs, invoices) {
         income: 0,
         outcome: 0,
         netResult: 0,
+        reimbursableInvoices: 0,
       },
     ])
   );
@@ -1003,7 +1013,11 @@ function buildVillaChart(villas, workEntries, programs, invoices) {
 
     if (!current) return;
 
-    current.outcome += number(invoice.amount);
+    if (isCompanyInvoice(invoice, villas)) {
+      current.outcome += number(invoice.amount);
+    } else {
+      current.reimbursableInvoices += number(invoice.amount);
+    }
   });
 
   return [...totals.values()]
@@ -2842,7 +2856,7 @@ export default function App() {
       0
     );
 
-    const invoiceCosts = data.invoices.reduce(
+    const invoiceCosts = data.invoices.filter((invoice) => isCompanyInvoice(invoice, data.villas)).reduce(
       (sum, item) => sum + number(item.amount),
       0
     );
@@ -2852,7 +2866,7 @@ export default function App() {
       programRevenue,
       revenue: workRevenue + programRevenue,
       employeeCosts,
-      grossProfit: workRevenue + programRevenue - employeeCosts,
+      grossProfit: workRevenue + programRevenue - employeeCosts - invoiceCosts,
       costs: employeeCosts + invoiceCosts,
       margin: workRevenue + programRevenue - employeeCosts - invoiceCosts,
     };
@@ -3413,7 +3427,7 @@ export default function App() {
                 <StatCard
                   label="Recorded Costs"
                   value={money(totals.costs)}
-                  detail="Employee work costs + invoices"
+                  detail="Employee work costs + company invoices"
                   icon={FileText}
                 />
 
@@ -3532,7 +3546,7 @@ export default function App() {
                           <Pie
                             data={[
                               { name: "Gross profit", value: Math.max(0, totals.grossProfit) },
-                              { name: "Employee costs", value: Math.max(0, totals.employeeCosts) },
+                              { name: "Company costs", value: Math.max(0, totals.costs) },
                             ]}
                             dataKey="value"
                             nameKey="name"
@@ -3680,8 +3694,16 @@ export default function App() {
                           />
 
                           <Bar
+                            dataKey="reimbursableInvoices"
+                            name={tr("Reimbursable invoices")}
+                            fill="#b0a5c2"
+                            radius={[4, 4, 0, 0]}
+                            maxBarSize={36}
+                          />
+
+                          <Bar
                             dataKey="netResult"
-                            name="Gross Margin"
+                            name={tr("Gross margin")}
                             fill="#9b8a78"
                             radius={[4, 4, 0, 0]}
                             maxBarSize={36}
