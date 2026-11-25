@@ -17,6 +17,17 @@ const API_URL = (import.meta.env.VITE_API_URL || "http://127.0.0.1:8000/api").re
 
 let uiLanguage = typeof localStorage !== "undefined" && localStorage.getItem("pk_language") === "el" ? "el" : "en";
 const greek = {
+  "Group by": "Ομαδοποίηση κατά",
+  "No grouping": "Χωρίς ομαδοποίηση",
+  "Month": "Μήνας",
+  "Rows per page": "Γραμμές ανά σελίδα",
+  "Page": "Σελίδα",
+  "of": "από",
+  "records": "καταχωρίσεις",
+  "DATABASE RECORDS": "ΚΑΤΑΧΩΡΙΣΕΙΣ ΒΑΣΗΣ",
+  "No work entries match your search.": "Δεν βρέθηκαν εργασίες.",
+  "Recorded work and charges from Django": "Καταγεγραμμένες εργασίες και χρεώσεις",
+
   "Overview": "Επισκόπηση",
   "Important Jobs": "Σημαντικές εργασίες",
   "Villas": "Κατοικίες",
@@ -162,6 +173,8 @@ const greek = {
   "Next": "Επόμενη",
   "Monthly": "Μηνιαία",
   "Yearly": "Ετήσια",
+  "Search employee, villa, department or date...": "Αναζήτηση εργαζομένου, κατοικίας, τμήματος ή ημερομηνίας...",
+  "Click to group or ungroup": "Πατήστε για ομαδοποίηση ή κατάργηση ομαδοποίησης",
   "Search work entries...": "Αναζήτηση εργασιών...",
   "Search customer or job...": "Αναζήτηση πελάτη ή εργασίας...",
   "Search employees, departments or salary type...": "Αναζήτηση εργαζομένων, τμημάτων ή τύπου αμοιβής...",
@@ -277,7 +290,6 @@ const navigation = [
   { id: "departments", label: "Departments", icon: BriefcaseBusiness },
   { id: "services", label: "Services", icon: Sprout },
   { id: "workEntries", label: "Work Entries", icon: ClipboardList },
-  { id: "programs", label: "Programs", icon: ChartNoAxesCombined },
   { id: "invoices", label: "Invoices", icon: FileText },
 ];
 
@@ -1134,6 +1146,49 @@ function DataTable({
   );
 }
 
+
+function WorkEntryTable({ rows, columns, search, onSearchChange, data }) {
+  const [groupBy, setGroupBy] = useState("none");
+  const [page, setPage] = useState(1);
+  const pageSize = 20;
+  const groupColumns = { Date: "date", Villa: "villa", Employee: "employee", Department: "department", Service: "service" };
+  useEffect(() => { setPage(1); }, [search]);
+  const groupName = (r) => {
+    switch (groupBy) {
+      case "villa": return getVillaName(r, data.villas);
+      case "employee": return getEmployeeName(r);
+      case "service": return getServiceName(r, data.services);
+      case "department": return r.department_name || "—";
+      case "date": return dateLabel(r.work_date);
+      case "month": return r.work_date ? String(r.work_date).slice(0, 7) : "—";
+      default: return "";
+    }
+  };
+  const groups = new Map();
+  rows.forEach(r => {
+    const name = groupName(r);
+    if (!groups.has(name)) groups.set(name, []);
+    groups.get(name).push(r);
+  });
+  const ordered = [...groups.entries()].sort(([a], [b]) => a.localeCompare(b, uiLanguage === "el" ? "el" : "en", { numeric: true }));
+  const flattened = ordered.flatMap(([name, items]) => items.map(row => ({ name, row, count: items.length })));
+  const totalPages = Math.max(1, Math.ceil(flattened.length / pageSize));
+  const safePage = Math.min(page, totalPages);
+  const visible = flattened.slice((safePage - 1) * pageSize, safePage * pageSize);
+  return <section className="panel table-panel">
+    <div className="panel-heading"><div><p className="eyebrow">{tr("DATABASE RECORDS")}</p><h2>{tr("Work Entries")}</h2></div><span className="record-count">{rows.length} {tr("records")}</span></div>
+    <div style={{display:"flex", gap:12, flexWrap:"wrap", alignItems:"center", marginBottom:16}}>
+      <div className="search-box" style={{maxWidth:360}}><Search size={17}/><input value={search} onChange={e => {onSearchChange(e.target.value); setPage(1);}} placeholder={tr("Search employee, villa, department or date...")} aria-label={tr("Search employee, villa, department or date...")}/></div>
+    </div>
+    {visible.length ? <div className="table-scroll"><table><thead><tr>{columns.map(c => <th key={c.label} scope="col">{groupColumns[c.label] ? <button type="button" aria-pressed={groupBy === groupColumns[c.label]} title={tr("Click to group or ungroup")} onClick={() => {setGroupBy(prev => prev === groupColumns[c.label] ? "none" : groupColumns[c.label]); setPage(1);}} style={{background:"transparent",border:0,padding:0,color:"inherit",font:"inherit",cursor:"pointer",textAlign:"left"}}>{tr(c.label)} {groupBy === groupColumns[c.label] ? "▼" : "↕"}</button> : tr(c.label)}</th>)}</tr></thead><tbody>
+      {visible.flatMap(({name,row,count}, i) => [
+        groupBy !== "none" && (i === 0 || visible[i-1].name !== name) ? <tr key={`group-${name}`}><td colSpan={columns.length}><strong>{name} · {count} {tr("records")}</strong></td></tr> : null,
+        <tr key={`work-${row.id ?? i}`}>{columns.map(c => <td key={c.label}>{c.render ? c.render(row) : (row[c.key] ?? "—")}</td>)}</tr>
+      ])}
+    </tbody></table></div> : <div className="empty-state">{tr("No work entries match your search.")}</div>}
+    {rows.length > 0 && <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:12,flexWrap:"wrap",padding:"14px 2px 2px"}}><span className="muted">{tr("Page")} {safePage} {tr("of")} {totalPages} · {rows.length} {tr("records")}</span><div style={{display:"flex",gap:8}}><button type="button" className="refresh-button" disabled={safePage <= 1} onClick={() => setPage(safePage-1)}>{tr("Previous")}</button><button type="button" className="refresh-button" disabled={safePage >= totalPages} onClick={() => setPage(safePage+1)}>{tr("Next")}</button></div></div>}
+  </section>;
+}
 
 function PaginationControls({ page, totalPages, onPageChange, totalItems }) {
   if (totalItems === 0) return null;
@@ -2931,8 +2986,8 @@ export default function App() {
       [
         getVillaName(entry, data.villas),
         getEmployeeName(entry),
-        getServiceName(entry, data.services),
-        entry.description,
+        entry.department_name,
+        dateLabel(entry.work_date),
         entry.work_date,
       ].join(" ").toLowerCase().includes(term)
     );
@@ -3081,6 +3136,7 @@ export default function App() {
         { label: "Date", render: (r) => dateLabel(r.work_date) },
         { label: "Villa", render: (r) => getVillaName(r, data.villas) },
         { label: "Employee", render: (r) => getEmployeeName(r) },
+        { label: "Department", render: (r) => r.department_name || "—" },
         { label: "Service", render: (r) => getServiceName(r, data.services) },
         { label: "Hours", key: "hours" },
         {
@@ -3209,14 +3265,14 @@ export default function App() {
 
           <div className="topbar-actions">
             <button type="button" className="icon-button" title={language === "el" ? "English" : "Ελληνικά"} aria-label={language === "el" ? "English" : "Ελληνικά"} onClick={() => setLanguage(v => v === "el" ? "en" : "el")}>{language === "el" ? "🇬🇧 EN" : "🇬🇷 EL"}</button>
-            <div className="search-box">
+            {activePage !== "workEntries" && <div className="search-box">
               <Search size={17} />
               <input
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder={tr("Search work entries...")}
               />
-            </div>
+            </div>}
 
             <button
               className="icon-button"
@@ -4140,17 +4196,11 @@ export default function App() {
                 <AddRecord page={activePage}/>
               </div>
 
-              {activePage === "workEntries" && (
-                <div className="search-hint">
-                  Search above to filter work entries.
-                </div>
+              {activePage === "workEntries" ? (
+                <WorkEntryTable rows={currentPage.rows} columns={currentPage.columns} search={search} onSearchChange={setSearch} data={data}/>
+              ) : (
+                <DataTable title={currentPage.title} rows={currentPage.rows} columns={currentPage.columns}/>
               )}
-
-              <DataTable
-                title={currentPage.title}
-                rows={currentPage.rows}
-                columns={currentPage.columns}
-              />
             </>
           ) : (
             <section className="panel">
