@@ -14,6 +14,238 @@ import "./App.css";
 
 const API_URL = (import.meta.env.VITE_API_URL || "http://127.0.0.1:8000/api").replace(/\/$/, "");
 
+
+let uiLanguage = typeof localStorage !== "undefined" && localStorage.getItem("pk_language") === "el" ? "el" : "en";
+const greek = {
+  "Overview": "Επισκόπηση",
+  "Important Jobs": "Σημαντικές εργασίες",
+  "Villas": "Κατοικίες",
+  "House Checks": "Έλεγχοι κατοικιών",
+  "Water Measurements": "Μετρήσεις νερού",
+  "Customers": "Πελάτες",
+  "Customer Payments": "Εισπράξεις πελατών",
+  "Suppliers": "Προμηθευτές",
+  "Supplier Payments": "Πληρωμές προμηθευτών",
+  "Employees": "Εργαζόμενοι",
+  "Company Gas": "Καύσιμα εταιρείας",
+  "Departments": "Τμήματα",
+  "Services": "Υπηρεσίες",
+  "Work Entries": "Καταχωρίσεις εργασιών",
+  "Programs": "Προγράμματα",
+  "Invoices": "Τιμολόγια",
+  "Add Villa": "Προσθήκη κατοικίας",
+  "Add Customer": "Προσθήκη πελάτη",
+  "Add Supplier": "Προσθήκη προμηθευτή",
+  "Add Employee": "Προσθήκη εργαζομένου",
+  "Add Department": "Προσθήκη τμήματος",
+  "Add Service": "Προσθήκη υπηρεσίας",
+  "Add Work Entry": "Καταχώριση εργασίας",
+  "Add Program": "Προσθήκη προγράμματος",
+  "Add Invoice": "Προσθήκη τιμολογίου",
+  "Add Customer Payment": "Καταχώριση είσπραξης",
+  "Add Supplier Payment": "Καταχώριση πληρωμής",
+  "Add Fuel Expense": "Καταχώριση καυσίμων",
+  "Add Job": "Προσθήκη εργασίας",
+  "Add House Check": "Καταχώριση ελέγχου",
+  "Add Measurement": "Καταχώριση μέτρησης",
+  "Refresh data": "Ανανέωση δεδομένων",
+  "Refresh": "Ανανέωση",
+  "Sign out": "Αποσύνδεση",
+  "Django API connected": "Σύνδεση με Django API",
+  "Open menu": "Άνοιγμα μενού",
+  "Data Analytics": "Ανάλυση δεδομένων",
+  "Revenue": "Έσοδα",
+  "Expenses": "Έξοδα",
+  "Gross profit": "Μικτό κέρδος",
+  "Gross margin": "Μικτό περιθώριο",
+  "Employee cost": "Κόστος εργαζομένων",
+  "Date": "Ημερομηνία",
+  "Amount": "Ποσό",
+  "Invoice": "Τιμολόγιο",
+  "Supplier": "Προμηθευτής",
+  "Customer": "Πελάτης",
+  "Department": "Τμήμα",
+  "Villa": "Κατοικία",
+  "Employee": "Εργαζόμενος",
+  "Service": "Υπηρεσία",
+  "Hours": "Ώρες",
+  "Notes": "Σημειώσεις",
+  "Description": "Περιγραφή",
+  "Name": "Όνομα",
+  "Area": "Περιοχή",
+  "Status": "Κατάσταση",
+  "Action": "Ενέργεια",
+  "Reference": "Αναφορά",
+  "Charges": "Χρεώσεις",
+  "Paid": "Εξοφλημένα",
+  "Outstanding": "Υπόλοιπο",
+  "Unpaid balance": "Ανεξόφλητο υπόλοιπο",
+  "Credit balance": "Πιστωτικό υπόλοιπο",
+  "Unpaid / credit": "Οφειλή / πίστωση",
+  "Department breakdown": "Ανάλυση ανά τμήμα",
+  "Export data": "Εξαγωγή δεδομένων",
+  "Export data ZIP": "Εξαγωγή δεδομένων ZIP",
+  "Total invoiced": "Σύνολο τιμολογίων",
+  "Total payments": "Σύνολο πληρωμών",
+  "Payment records": "Καταχωρίσεις πληρωμών",
+  "Average payment": "Μέση πληρωμή",
+  "Supplier invoices": "Τιμολόγια προμηθευτών",
+  "Customer charges": "Χρεώσεις πελατών",
+  "Supplier payments": "Πληρωμές προμηθευτών",
+  "Customer payments": "Εισπράξεις πελατών",
+  "Customer statistics": "Στατιστικά πελατών",
+  "Supplier statistics": "Στατιστικά προμηθευτών",
+  "Salary": "Μισθός",
+  "Salary type": "Τύπος αμοιβής",
+  "Service type": "Τύπος υπηρεσίας",
+  "Revenue earned": "Παραγόμενα έσοδα",
+  "Gross earned": "Μικτές αποδοχές",
+  "Recorded salary cost": "Καταγεγραμμένο μισθολογικό κόστος",
+  "Program": "Πρόγραμμα",
+  "Monthly price": "Μηνιαία τιμή",
+  "Start date": "Ημερομηνία έναρξης",
+  "End date": "Ημερομηνία λήξης",
+  "Customer charge": "Χρέωση πελάτη",
+  "Villa name": "Όνομα κατοικίας",
+  "Total villas": "Σύνολο κατοικιών",
+  "Registered Villas": "Καταχωρισμένες κατοικίες",
+  "Need checking": "Χρειάζονται έλεγχο",
+  "Already checked": "Ελεγμένες",
+  "Last check": "Τελευταίος έλεγχος",
+  "Next due": "Επόμενος έλεγχος",
+  "Checked by": "Ελέγχθηκε από",
+  "Condition": "Κατάσταση",
+  "Inspection date": "Ημερομηνία ελέγχου",
+  "Measurement date": "Ημερομηνία μέτρησης",
+  "Source": "Πηγή",
+  "Reading / level": "Ένδειξη / στάθμη",
+  "Select a villa": "Επιλέξτε κατοικία",
+  "Select a water tank": "Επιλέξτε δεξαμενή",
+  "Select customer": "Επιλέξτε πελάτη",
+  "Water Measurement Program": "Πρόγραμμα μετρήσεων νερού",
+  "House Checking Program": "Πρόγραμμα ελέγχων κατοικιών",
+  "water measurement": "μέτρηση νερού",
+  "house check": "έλεγχος κατοικίας",
+  "Record": "Καταχώριση",
+  "Record saved successfully": "Η καταχώριση αποθηκεύτηκε επιτυχώς",
+  "Loading inspection status...": "Φόρτωση κατάστασης ελέγχων...",
+  "Pending jobs": "Εκκρεμείς εργασίες",
+  "Completed": "Ολοκληρωμένες",
+  "Critical / overdue": "Κρίσιμες / εκπρόθεσμες",
+  "Deadline": "Προθεσμία",
+  "Procedure days": "Ημέρες διαδικασίας",
+  "Procedure": "Διάρκεια διαδικασίας",
+  "Recommended start": "Προτεινόμενη έναρξη",
+  "Latest start": "Τελευταία δυνατή έναρξη",
+  "Time remaining": "Χρόνος που απομένει",
+  "Spare days": "Περιθώριο ημερών",
+  "Edit job": "Επεξεργασία εργασίας",
+  "New job": "Νέα εργασία",
+  "Save job": "Αποθήκευση εργασίας",
+  "Cancel": "Ακύρωση",
+  "Edit": "Επεξεργασία",
+  "Reopen job": "Επαναφορά εργασίας",
+  "Mark completed": "Σήμανση ως ολοκληρωμένη",
+  "Pending duties": "Εκκρεμείς εργασίες",
+  "Completed duties": "Ολοκληρωμένες εργασίες",
+  "No matching jobs.": "Δεν βρέθηκαν εργασίες.",
+  "Fuel": "Καύσιμο",
+  "Fuel type": "Τύπος καυσίμου",
+  "Month": "Μήνας",
+  "All employees": "Όλοι οι εργαζόμενοι",
+  "All fuels": "Όλα τα καύσιμα",
+  "Clear filters": "Καθαρισμός φίλτρων",
+  "Rows per page": "Γραμμές ανά σελίδα",
+  "Open PDF ↗": "Άνοιγμα PDF ↗",
+  "Invalid invoice link": "Μη έγκυρος σύνδεσμος τιμολογίου",
+  "Previous": "Προηγούμενη",
+  "Next": "Επόμενη",
+  "Monthly": "Μηνιαία",
+  "Yearly": "Ετήσια",
+  "Search work entries...": "Αναζήτηση εργασιών...",
+  "Search customer or job...": "Αναζήτηση πελάτη ή εργασίας...",
+  "Search employees, departments or salary type...": "Αναζήτηση εργαζομένων, τμημάτων ή τύπου αμοιβής...",
+  "Search employee charts...": "Αναζήτηση γραφημάτων εργαζομένων...",
+  "Search services or departments...": "Αναζήτηση υπηρεσιών ή τμημάτων...",
+  "Search service charts...": "Αναζήτηση γραφημάτων υπηρεσιών...",
+  "PROPERTY PERFORMANCE": "ΑΠΟΔΟΣΗ ΚΑΤΟΙΚΙΩΝ",
+  "DEPARTMENT PERFORMANCE": "ΑΠΟΔΟΣΗ ΤΜΗΜΑΤΩΝ",
+  "SERVICE PERFORMANCE": "ΑΠΟΔΟΣΗ ΥΠΗΡΕΣΙΩΝ",
+  "EMPLOYEE PERFORMANCE": "ΑΠΟΔΟΣΗ ΕΡΓΑΖΟΜΕΝΩΝ",
+  "PROPERTY OPERATIONS": "ΔΙΑΧΕΙΡΙΣΗ ΚΑΤΟΙΚΙΩΝ",
+  "SUPPLIER INVOICE ANALYTICS": "ΑΝΑΛΥΣΗ ΤΙΜΟΛΟΓΙΩΝ ΠΡΟΜΗΘΕΥΤΩΝ",
+  "PAYMENT STATISTICS": "ΣΤΑΤΙΣΤΙΚΑ ΠΛΗΡΩΜΩΝ",
+  "SUPPLIER ACCOUNTS": "ΛΟΓΑΡΙΑΣΜΟΙ ΠΡΟΜΗΘΕΥΤΩΝ",
+  "CUSTOMER ACCOUNTS": "ΛΟΓΑΡΙΑΣΜΟΙ ΠΕΛΑΤΩΝ",
+  "PAYMENT STATUS": "ΚΑΤΑΣΤΑΣΗ ΠΛΗΡΩΜΩΝ",
+  "VILLA FINANCIAL SUMMARY": "ΟΙΚΟΝΟΜΙΚΗ ΣΥΝΟΨΗ ΚΑΤΟΙΚΙΩΝ",
+  "DEPARTMENT FINANCIAL SUMMARY": "ΟΙΚΟΝΟΜΙΚΗ ΣΥΝΟΨΗ ΤΜΗΜΑΤΩΝ",
+  "SERVICE FINANCIAL SUMMARY": "ΟΙΚΟΝΟΜΙΚΗ ΣΥΝΟΨΗ ΥΠΗΡΕΣΙΩΝ",
+  "EMPLOYEE EARNINGS SUMMARY": "ΣΥΝΟΨΗ ΑΠΟΔΟΧΩΝ ΕΡΓΑΖΟΜΕΝΩΝ",
+  "PAROS KATOIKIA DATABASE": "ΒΑΣΗ ΔΕΔΟΜΕΝΩΝ PAROS KATOIKIA",
+  "OPERATIONS / DEADLINES": "ΕΡΓΑΣΙΕΣ / ΠΡΟΘΕΣΜΙΕΣ",
+  "JOB REGISTER": "ΜΗΤΡΩΟ ΕΡΓΑΣΙΩΝ",
+  "COMPANY EXPENSES / FUEL": "ΕΤΑΙΡΙΚΑ ΕΞΟΔΑ / ΚΑΥΣΙΜΑ",
+  "Villa revenue & gross profit": "Έσοδα και μικτό κέρδος κατοικιών",
+  "Department revenue & gross profit": "Έσοδα και μικτό κέρδος τμημάτων",
+  "Service revenue & gross profit": "Έσοδα και μικτό κέρδος υπηρεσιών",
+  "Salary, revenue earned & gross earned": "Μισθός, έσοδα και μικτές αποδοχές",
+  "Supplier payments vs outstanding": "Πληρωμές προμηθευτών και οφειλές",
+  "Fuel expenses paid by the company for employees.": "Έξοδα καυσίμων εργαζομένων που πληρώνει η εταιρεία.",
+  "Plan ahead, track urgency and complete your duties.": "Προγραμματίστε και παρακολουθήστε τις εκκρεμείς εργασίες.",
+  "Invoice totals, departmental costs, supplier balances and individual charts.": "Σύνολα τιμολογίων, έξοδα τμημάτων, υπόλοιπα προμηθευτών και γραφήματα.",
+  "Recorded charges, payments, outstanding balances and cost distributions by department.": "Χρεώσεις, πληρωμές, υπόλοιπα και κατανομή κόστους ανά τμήμα.",
+  "Recorded payments, outstanding account balances and individual payment charts.": "Καταγεγραμμένες πληρωμές, υπόλοιπα και γραφήματα πληρωμών.",
+  "Total recorded": "Σύνολο καταχωρίσεων",
+  "Payments recorded": "Καταγεγραμμένες πληρωμές",
+  "Charges minus payments": "Χρεώσεις μείον πληρωμές",
+  "Accounts": "Λογαριασμοί",
+  "Transactions": "Συναλλαγές",
+  "Per transaction": "Ανά συναλλαγή",
+  "All recorded payments": "Όλες οι καταγεγραμμένες πληρωμές",
+  "Unpaid across accounts": "Ανεξόφλητα όλων των λογαριασμών",
+  "All invoice records": "Όλες οι καταχωρίσεις τιμολογίων",
+  "Recorded through today": "Καταχωρίσεις έως σήμερα",
+  "Positive supplier balances": "Θετικά υπόλοιπα προμηθευτών",
+  "Managed properties": "Διαχειριζόμενες κατοικίες",
+  "Overdue or never checked": "Εκπρόθεσμες ή χωρίς έλεγχο",
+  "Within the last 7 days": "Εντός των τελευταίων 7 ημερών",
+  "All open duties": "Όλες οι εκκρεμότητες",
+  "Immediate attention": "Άμεση προσοχή",
+  "Job history": "Ιστορικό εργασιών",
+  "Sign in": "Σύνδεση",
+  "Username": "Όνομα χρήστη",
+  "Password": "Κωδικός πρόσβασης",
+  "Villa Management": "Διαχείριση κατοικιών"
+};
+function tr(value) { return uiLanguage === "el" && typeof value === "string" ? (greek[value] || value) : value; }
+const addModels = {
+  villas: ["house", "Add Villa"], customers: ["customer", "Add Customer"],
+  suppliers: ["supplier", "Add Supplier"], employees: ["employee", "Add Employee"],
+  departments: ["department", "Add Department"], services: ["servicecategory", "Add Service"],
+  workEntries: ["workentry", "Add Work Entry"], invoices: ["invoice", "Add Invoice"],
+  customerPayments: ["customerpayment", "Add Customer Payment"], supplierPayments: ["supplierpayment", "Add Supplier Payment"],
+  companyGas: ["company_gas", "Add Fuel Expense"], programs: ["house", "Add Program"]
+};
+function AddRecord({page}) {
+  const entry = addModels[page];
+  if (!entry) return null;
+  const [model, label] = entry;
+  // Programs are managed as inlines on existing villas, not a standalone admin model.
+  const path = `/admin/core/${model}/${page === "programs" ? "" : "add/"}`;
+  const href = new URL(path, new URL(API_URL, window.location.origin).origin).href;
+  return <a className="refresh-button" href={href} target="_blank" rel="noopener noreferrer" style={{textDecoration:"none"}}>+ {tr(label)}</a>;
+}
+function InvoiceLink({record}) {
+  const label = record.invoice_number || "—";
+  if (!record.attachment) return label;
+  try {
+    const url = new URL(record.attachment, new URL(API_URL, window.location.origin).origin + "/");
+    if (!["http:", "https:"].includes(url.protocol)) return label;
+    return <a href={url.href} target="_blank" rel="noopener noreferrer">{label} ↗</a>;
+  } catch { return label; }
+}
+
 const ENDPOINTS = {
   villas: "/villas/",
   customers: "/customers/",
@@ -479,7 +711,7 @@ function FinancialBreakdownChart({ displayType, revenue, expenses, grossProfit }
           }).format(value)}
         />
         <Tooltip formatter={(value) => money(value)} />
-        <Bar dataKey="amount" name="Amount" radius={[4, 4, 0, 0]} maxBarSize={34} fill="#b99b65" />
+        <Bar dataKey="amount" name={tr("Amount")} radius={[4, 4, 0, 0]} maxBarSize={34} fill="#b99b65" />
       </BarChart>
     </ResponsiveContainer>
   );
@@ -546,23 +778,20 @@ function PerformancePage({
     <>
       <div className="welcome-row">
         <div>
-          <p className="eyebrow">{eyebrow}</p>
-          <h1>{title}</h1>
-          <p className="muted">{subtitle}</p>
+          <p className="eyebrow">{tr(eyebrow)}</p>
+          <h1>{tr(title)}</h1>
+          <p className="muted">{tr(subtitle)}</p>
         </div>
         {onRefresh && (
-          <button className="refresh-button" onClick={onRefresh}>
-            <RefreshCw size={16} />
-            Refresh data
-          </button>
+          <AddRecord page={title === "Services" ? "services" : "employees"}/>
         )}
       </div>
 
       <section className="panel table-panel">
         <div className="panel-heading">
           <div>
-            <p className="eyebrow">{tableEyebrow}</p>
-            <h2>{tableTitle}</h2>
+            <p className="eyebrow">{tr(tableEyebrow)}</p>
+            <h2>{tr(tableTitle)}</h2>
           </div>
           <span className="record-count">{filteredTable.length} records</span>
         </div>
@@ -586,7 +815,7 @@ function PerformancePage({
           <div className="table-scroll">
             <table>
               <thead>
-                <tr>{tableColumns.map((column) => <th key={column.label}>{column.label}</th>)}</tr>
+                <tr>{tableColumns.map((column) => <th key={column.label}>{tr(column.label)}</th>)}</tr>
               </thead>
               <tbody>
                 {paginatedTable.map((item) => (
@@ -777,11 +1006,11 @@ function StatCard({ label, value, detail, icon: Icon }) {
   return (
     <div className="stat-card">
       <div className="stat-top">
-        <span>{label}</span>
+        <span>{tr(label)}</span>
         <span className="stat-icon"><Icon size={19} /></span>
       </div>
       <div className="stat-value">{value}</div>
-      <div className="stat-detail">{detail}</div>
+      <div className="stat-detail">{tr(detail)}</div>
     </div>
   );
 }
@@ -807,7 +1036,7 @@ function LoginScreen({ onLogin, loading, error }) {
 
         {error && <div className="error-message">{error}</div>}
 
-        <label htmlFor="username">Username</label>
+        <label htmlFor="username">{tr("Username")}</label>
         <input
           id="username"
           value={username}
@@ -816,7 +1045,7 @@ function LoginScreen({ onLogin, loading, error }) {
           required
         />
 
-        <label htmlFor="password">Password</label>
+        <label htmlFor="password">{tr("Password")}</label>
         <input
           id="password"
           type="password"
@@ -852,7 +1081,7 @@ function DataTable({
       <div className="panel-heading">
         <div>
           <p className="eyebrow">DATABASE RECORDS</p>
-          <h2>{title}</h2>
+          <h2>{tr(title)}</h2>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
           {headerActions}
@@ -880,7 +1109,7 @@ function DataTable({
             <thead>
               <tr>
                 {columns.map((column) => (
-                  <th key={column.label}>{column.label}</th>
+                  <th key={column.label}>{tr(column.label)}</th>
                 ))}
               </tr>
             </thead>
@@ -931,7 +1160,7 @@ function PaginationControls({ page, totalPages, onPageChange, totalItems }) {
           onClick={() => onPageChange(page - 1)}
           style={{ opacity: page <= 1 ? 0.45 : 1 }}
         >
-          Previous
+          {tr("Previous")}
         </button>
         <button
           type="button"
@@ -940,7 +1169,7 @@ function PaginationControls({ page, totalPages, onPageChange, totalItems }) {
           onClick={() => onPageChange(page + 1)}
           style={{ opacity: page >= totalPages ? 0.45 : 1 }}
         >
-          Next
+          {tr("Next")}
         </button>
       </div>
     </div>
@@ -1001,7 +1230,7 @@ function DepartmentBoxplots({ records, title }) {
       <div className="panel-heading">
         <div>
           <p className="eyebrow">COST DISTRIBUTION</p>
-          <h2>{title}</h2>
+          <h2>{tr(title)}</h2>
           <p className="muted">Each box shows the middle 50% of individual recorded amounts. Line = median; whiskers = minimum and maximum.</p>
         </div>
       </div>
@@ -1047,7 +1276,7 @@ function PaymentComparisonChart({ displayType, paid, unpaid }) {
     <CartesianGrid strokeDasharray="3 3" vertical={false}/>
     <XAxis dataKey="name"/><YAxis tickFormatter={(v) => new Intl.NumberFormat("en-GB", { notation: "compact" }).format(v)}/>
     <Tooltip formatter={(v) => money(v)}/>
-    <Bar dataKey="amount" name="Amount" maxBarSize={55} radius={[5, 5, 0, 0]}>
+    <Bar dataKey="amount" name={tr("Amount")} maxBarSize={55} radius={[5, 5, 0, 0]}>
       {values.map((v) => <Cell key={v.name} fill={v.color}/>)}
     </Bar>
   </BarChart></ResponsiveContainer>;
@@ -1060,14 +1289,14 @@ function DepartmentCostBars({ records, title }) {
     return [...totals.entries()].map(([department, amount]) => ({ department, amount })).sort((a, b) => b.amount - a.amount);
   }, [records]);
   return <section className="panel" style={{ marginTop: 20 }}>
-    <div className="panel-heading"><div><p className="eyebrow">COST DISTRIBUTION</p><h2>{title}</h2><p className="muted">Total recorded amounts grouped by department.</p></div></div>
+    <div className="panel-heading"><div><p className="eyebrow">COST DISTRIBUTION</p><h2>{tr(title)}</h2><p className="muted">Total recorded amounts grouped by department.</p></div></div>
     {grouped.length ? <div style={{ width: "100%", height: Math.max(290, grouped.length * 52 + 55) }}>
       <ResponsiveContainer width="100%" height="100%"><BarChart data={grouped} layout="vertical" margin={{ top: 5, right: 35, left: 40, bottom: 5 }}>
         <CartesianGrid strokeDasharray="3 3" horizontal={false}/>
         <XAxis type="number" tickFormatter={(v) => new Intl.NumberFormat("en-GB", { notation: "compact" }).format(v)}/>
         <YAxis type="category" dataKey="department" width={120} tick={{ fontSize: 11 }}/>
         <Tooltip formatter={(v) => money(v)}/>
-        <Bar dataKey="amount" name="Amount" fill="#b99b65" radius={[0, 5, 5, 0]} maxBarSize={26}/>
+        <Bar dataKey="amount" name={tr("Amount")} fill="#b99b65" radius={[0, 5, 5, 0]} maxBarSize={26}/>
       </BarChart></ResponsiveContainer>
     </div> : <div className="empty-state">No departmental amounts available.</div>}
   </section>;
@@ -1211,21 +1440,21 @@ function AccountAnalytics({ kind, data, onRefresh, token }) {
     <>
       <div className="welcome-row">
         <div>
-          <p className="eyebrow">{isSupplier ? "SUPPLIER ACCOUNTS" : "CUSTOMER ACCOUNTS"}</p>
-          <h1>{isSupplier ? "Supplier statistics" : "Customer statistics"}</h1>
-          <p className="muted">Recorded charges, payments, outstanding balances and cost distributions by department.</p>
+          <p className="eyebrow">{isSupplier ? tr("SUPPLIER ACCOUNTS") : tr("CUSTOMER ACCOUNTS")}</p>
+          <h1>{isSupplier ? tr("Supplier statistics") : tr("Customer statistics")}</h1>
+          <p className="muted">{tr("Recorded charges, payments, outstanding balances and cost distributions by department.")}</p>
         </div>
-        <button className="refresh-button" onClick={onRefresh}><RefreshCw size={16}/> Refresh data</button>
+        <AddRecord page={isSupplier ? "suppliers" : "customers"}/>
       </div>
       <div className="stats-grid">
-        <StatCard label={isSupplier ? "Supplier invoices" : "Customer charges"} value={money(total)} detail="Total recorded" icon={FileText}/>
-        <StatCard label="Paid" value={money(paid)} detail="Payments recorded" icon={Wallet}/>
-        <StatCard label={balance >= 0 ? "Unpaid balance" : "Credit balance"} value={money(Math.abs(balance))} detail="Charges minus payments" icon={CreditCard}/>
-        <StatCard label={isSupplier ? "Suppliers" : "Customers"} value={rows.length} detail="Accounts" icon={Users}/>
+        <StatCard label={isSupplier ? tr("Supplier invoices") : tr("Customer charges")} value={money(total)} detail={tr("Total recorded")} icon={FileText}/>
+        <StatCard label={tr("Paid")} value={money(paid)} detail={tr("Payments recorded")} icon={Wallet}/>
+        <StatCard label={balance >= 0 ? tr("Unpaid balance") : tr("Credit balance")} value={money(Math.abs(balance))} detail={tr("Charges minus payments")} icon={CreditCard}/>
+        <StatCard label={isSupplier ? tr("Suppliers") : tr("Customers")} value={rows.length} detail={tr("Accounts")} icon={Users}/>
       </div>
       <section className="panel" style={{ marginTop: 20 }}>
         <div className="panel-heading">
-          <div><p className="eyebrow">PAYMENT STATUS</p><h2>Paid vs outstanding</h2></div>
+          <div><p className="eyebrow">{tr("PAYMENT STATUS")}</p><h2>Paid vs outstanding</h2></div>
           <button className="refresh-button" type="button" onClick={() => setPaymentDisplay((v) => v === "bar" ? "pie" : "bar")}>Switch to {paymentDisplay === "bar" ? "pie" : "bar"} chart</button>
         </div>
         <div style={{ width: "100%", height: 280 }}>
@@ -1261,7 +1490,7 @@ function AccountAnalytics({ kind, data, onRefresh, token }) {
           <input value={accountSearch} onChange={(e) => {setAccountSearch(e.target.value);setAccountPage(1);}} placeholder={`Search ${isSupplier ? "suppliers" : "customers"}...`} />
         </div>
         <div className="table-scroll"><table>
-          <thead><tr><th>Name</th><th>Charges</th><th>Paid</th><th>Unpaid / credit</th><th>Department breakdown</th>{!isSupplier && <th>Export data</th>}</tr></thead>
+          <thead><tr><th>{tr("Name")}</th><th>{tr("Charges")}</th><th>{tr("Paid")}</th><th>{tr("Unpaid / credit")}</th><th>{tr("Department breakdown")}</th>{!isSupplier && <th>{tr("Export data")}</th>}</tr></thead>
           <tbody>{visibleAccounts.map((r) => <tr key={r.id}>
             <td>{r.name}</td><td>{money(r.charged)}</td><td>{money(r.paid)}</td>
             <td>{r.balance < 0 ? `${money(-r.balance)} credit` : money(r.balance)}</td>
@@ -1278,7 +1507,7 @@ function AccountAnalytics({ kind, data, onRefresh, token }) {
         <div className="panel-heading">
           <div>
             <p className="eyebrow">INDIVIDUAL ACCOUNT CHARTS</p>
-            <h2>{isSupplier ? "Supplier" : "Customer"} payment performance</h2>
+            <h2>{isSupplier ? tr("Supplier") : tr("Customer")} payment performance</h2>
             <p className="muted">Individual account charges, payments and outstanding balances.</p>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
@@ -1389,17 +1618,17 @@ function PaymentsAnalytics({ kind, data, onRefresh }) {
 
   return <>
     <div className="welcome-row"><div>
-      <p className="eyebrow">PAYMENT STATISTICS</p><h1>{title}</h1>
-      <p className="muted">Recorded payments, outstanding account balances and individual payment charts.</p>
-    </div><button className="refresh-button" onClick={onRefresh}><RefreshCw size={16}/> Refresh data</button></div>
+      <p className="eyebrow">{tr("PAYMENT STATISTICS")}</p><h1>{tr(title)}</h1>
+      <p className="muted">{tr("Recorded payments, outstanding account balances and individual payment charts.")}</p>
+    </div><AddRecord page={isSupplier ? "supplierPayments" : "customerPayments"}/></div>
     <div className="stats-grid">
-      <StatCard label="Total payments" value={money(enriched.reduce((a, r) => a + number(r.amount), 0))} detail="All recorded payments" icon={Wallet}/>
-      <StatCard label="Payment records" value={enriched.length} detail="Transactions" icon={CreditCard}/>
-      <StatCard label="Average payment" value={money(enriched.length ? enriched.reduce((a, r) => a + number(r.amount), 0) / enriched.length : 0)} detail="Per transaction" icon={ChartNoAxesCombined}/>
-      <StatCard label="Outstanding" value={money(totalUnpaid)} detail="Unpaid across accounts" icon={FileText}/>
+      <StatCard label={tr("Total payments")} value={money(enriched.reduce((a, r) => a + number(r.amount), 0))} detail={tr("All recorded payments")} icon={Wallet}/>
+      <StatCard label={tr("Payment records")} value={enriched.length} detail={tr("Transactions")} icon={CreditCard}/>
+      <StatCard label={tr("Average payment")} value={money(enriched.length ? enriched.reduce((a, r) => a + number(r.amount), 0) / enriched.length : 0)} detail={tr("Per transaction")} icon={ChartNoAxesCombined}/>
+      <StatCard label={tr("Outstanding")} value={money(totalUnpaid)} detail={tr("Unpaid across accounts")} icon={FileText}/>
     </div>
     <section className="panel" style={{ marginTop: 20 }}>
-      <div className="panel-heading"><div><p className="eyebrow">PAYMENT STATUS</p><h2>Paid vs unpaid</h2></div>
+      <div className="panel-heading"><div><p className="eyebrow">{tr("PAYMENT STATUS")}</p><h2>Paid vs unpaid</h2></div>
         <button className="refresh-button" type="button" onClick={() => setTotalDisplay(v => v === "bar" ? "pie" : "bar")}>Switch to {totalDisplay === "bar" ? "pie" : "bar"} chart</button>
       </div>
       <div style={{ height: 280, width: "100%" }}><PaymentComparisonChart displayType={totalDisplay} paid={totalPaid} unpaid={totalUnpaid}/></div>
@@ -1409,7 +1638,7 @@ function PaymentsAnalytics({ kind, data, onRefresh }) {
       <div className="search-box" style={{ maxWidth: 360, marginBottom: 16 }}><Search size={17}/>
         <input value={search} onChange={e => {setSearch(e.target.value);setPage(1);}} placeholder="Search payments, names, references..."/>
       </div>
-      <div className="table-scroll"><table><thead><tr><th>Date</th><th>{isSupplier ? "Supplier" : "Customer"}</th><th>Amount</th><th>Reference</th><th>Notes</th></tr></thead>
+      <div className="table-scroll"><table><thead><tr><th>{tr("Date")}</th><th>{isSupplier ? tr("Supplier") : tr("Customer")}</th><th>{tr("Amount")}</th><th>{tr("Reference")}</th><th>{tr("Notes")}</th></tr></thead>
         <tbody>{pageRows.map((r) => <tr key={r.id}><td>{dateLabel(r.payment_date)}</td><td>{r.partyName}</td><td>{money(r.amount)}</td><td>{r.reference || "—"}</td><td>{r.notes || "—"}</td></tr>)}</tbody>
       </table></div>
       {!pageRows.length && <div className="empty-state">No matching payments.</div>}
@@ -1503,18 +1732,18 @@ function InvoiceAnalytics({ data, onRefresh }) {
 
   return <>
     <div className="welcome-row">
-      <div><p className="eyebrow">SUPPLIER INVOICE ANALYTICS</p><h1>Invoices</h1>
-        <p className="muted">Invoice totals, departmental costs, supplier balances and individual charts.</p></div>
-      <button className="refresh-button" onClick={onRefresh}><RefreshCw size={16}/> Refresh data</button>
+      <div><p className="eyebrow">{tr("SUPPLIER INVOICE ANALYTICS")}</p><h1>{tr("Invoices")}</h1>
+        <p className="muted">{tr("Invoice totals, departmental costs, supplier balances and individual charts.")}</p></div>
+      <AddRecord page={"invoices"}/>
     </div>
     <div className="stats-grid">
-      <StatCard label="Total invoiced" value={money(invoices.reduce((sum, r) => sum + number(r.amount), 0))} detail="All invoice records" icon={FileText}/>
-      <StatCard label="Supplier payments" value={money(paid)} detail="Recorded through today" icon={Wallet}/>
-      <StatCard label="Outstanding" value={money(outstanding)} detail="Positive supplier balances" icon={CreditCard}/>
-      <StatCard label="Invoices" value={invoices.length} detail={`Average ${money(invoices.length ? invoices.reduce((sum, r) => sum + number(r.amount), 0) / invoices.length : 0)}`} icon={ChartNoAxesCombined}/>
+      <StatCard label={tr("Total invoiced")} value={money(invoices.reduce((sum, r) => sum + number(r.amount), 0))} detail={tr("All invoice records")} icon={FileText}/>
+      <StatCard label={tr("Supplier payments")} value={money(paid)} detail={tr("Recorded through today")} icon={Wallet}/>
+      <StatCard label={tr("Outstanding")} value={money(outstanding)} detail={tr("Positive supplier balances")} icon={CreditCard}/>
+      <StatCard label={tr("Invoices")} value={invoices.length} detail={`Average ${money(invoices.length ? invoices.reduce((sum, r) => sum + number(r.amount), 0) / invoices.length : 0)}`} icon={ChartNoAxesCombined}/>
     </div>
     <section className="panel" style={{ marginTop: 20 }}>
-      <div className="panel-heading"><div><p className="eyebrow">PAYMENT STATUS</p><h2>Supplier payments vs outstanding</h2></div>
+      <div className="panel-heading"><div><p className="eyebrow">{tr("PAYMENT STATUS")}</p><h2>{tr("Supplier payments vs outstanding")}</h2></div>
         <button className="refresh-button" type="button" onClick={() => setSummaryDisplay(v => v === "bar" ? "pie" : "bar")}>Switch to {summaryDisplay === "bar" ? "pie" : "bar"} chart</button>
       </div>
       <div style={{ width: "100%", height: 280 }}><PaymentComparisonChart displayType={summaryDisplay} paid={paid} unpaid={outstanding}/></div>
@@ -1526,8 +1755,8 @@ function InvoiceAnalytics({ data, onRefresh }) {
       <div className="search-box" style={{ maxWidth: 360, marginBottom: 16 }}><Search size={17}/>
         <input value={search} onChange={e => { setSearch(e.target.value); setPage(1); }} placeholder="Search invoices, suppliers, departments, villas..."/>
       </div>
-      <div className="table-scroll"><table><thead><tr><th>Invoice</th><th>Date</th><th>Supplier</th><th>Department</th><th>Villa</th><th>Amount</th></tr></thead>
-        <tbody>{visible.map((r, i) => <tr key={r.id ?? i}><td>{r.invoice_number || "—"}</td><td>{dateLabel(r.invoice_date)}</td><td>{r.supplierName}</td><td>{r.departmentName}</td><td>{r.villaName}</td><td>{money(r.amount)}</td></tr>)}</tbody>
+      <div className="table-scroll"><table><thead><tr><th>{tr("Invoice")}</th><th>{tr("Date")}</th><th>{tr("Supplier")}</th><th>{tr("Department")}</th><th>{tr("Villa")}</th><th>{tr("Amount")}</th></tr></thead>
+        <tbody>{visible.map((r, i) => <tr key={r.id ?? i}><td><InvoiceLink record={r}/></td><td>{dateLabel(r.invoice_date)}</td><td>{r.supplierName}</td><td>{r.departmentName}</td><td>{r.villaName}</td><td>{money(r.amount)}</td></tr>)}</tbody>
       </table></div>
       {!visible.length && <div className="empty-state">No matching invoices.</div>}
       <PaginationControls page={safePage} totalPages={pages} totalItems={filtered.length} onPageChange={setPage}/>
@@ -1590,7 +1819,7 @@ function openWeeklyFieldProgram({ rows, isWater, generatedAt, printWindow }) {
   const groupMarkup = sortedGroups.map(([area, houses]) => `
     <section class="area-group">
       <div class="area-heading"><h2>${escapeHtml(area)}</h2><span>${houses.length} ${houses.length === 1 ? "villa" : "villas"}</span></div>
-      <table><thead><tr><th class="done">Done</th><th>Villa / Customer</th><th>Last ${isWater ? "measurement" : "check"}</th><th>Due date</th><th>Employee</th></tr></thead>
+      <table><thead><tr><th class="done">Done</th><th>Villa / Customer</th><th>Last ${isWater ? "measurement" : "check"}</th><th>Due date</th><th>{tr("Employee")}</th></tr></thead>
       <tbody>${houses.map((house) => `<tr>
         <td class="done"><span class="checkbox"></span></td>
         <td><strong>${escapeHtml(house.house_name || "Unnamed villa")}</strong><small>${escapeHtml(house.customer_name || "")}</small></td>
@@ -1917,7 +2146,7 @@ function WeeklyOperationsPage({ kind, token, villas }) {
           placeholder="Search villa, customer or area..." aria-label={`Search ${isMissing ? "unchecked" : "checked"} houses`}/>
       </div>
       {shown.length ? <div className="table-scroll"><table><thead><tr>
-        <th>Villa</th><th>Customer</th><th>Area</th><th>Last check</th><th>Next due</th><th>Status</th><th>Action</th>
+        <th>{tr("Villa")}</th><th>{tr("Customer")}</th><th>{tr("Area")}</th><th>{tr("Last check")}</th><th>{tr("Next due")}</th><th>{tr("Status")}</th><th>{tr("Action")}</th>
       </tr></thead><tbody>{shown.map((item) => <tr key={item.house_id}>
         <td><strong>{item.house_name}</strong></td><td>{item.customer_name || "—"}</td><td>{item.area || "—"}</td>
         <td>{dateLabel(item[dateField])}</td><td>{dateLabel(item[dueField])}</td>
@@ -1934,13 +2163,13 @@ function WeeklyOperationsPage({ kind, token, villas }) {
   }
 
   return <>
-    <div className="welcome-row"><div><p className="eyebrow">PROPERTY OPERATIONS</p><h1>{title}</h1>
+    <div className="welcome-row"><div><p className="eyebrow">{tr("PROPERTY OPERATIONS")}</p><h1>{tr(title)}</h1>
       <p className="muted">Mandatory at least once every 7 days. {isWater ? "A municipal meter reading or tank level is sufficient; both can be recorded." : "Record the villa condition independently from water measurements."}</p>
-    </div><button type="button" className="refresh-button" onClick={printProgram}><Download size={16}/> {isWater ? "Water Measurement Program" : "House Checking Program"}</button></div>
+    </div><div style={{display:"flex",gap:8,flexWrap:"wrap"}}><button type="button" className="refresh-button" onClick={()=>document.getElementById("weekly-record-form")?.scrollIntoView({behavior:"smooth"})}>{"+ " + tr(isWater ? "Add Measurement" : "Add House Check")}</button><button type="button" className="refresh-button" onClick={printProgram}><Download size={16}/> {isWater ? tr("Water Measurement Program") : tr("House Checking Program")}</button></div></div>
     <div className="stats-grid">
-      <StatCard label="Total villas" value={records.length} detail="Managed properties" icon={Building2}/>
-      <StatCard label="Need checking" value={missing.length} detail="Overdue or never checked" icon={CircleAlert}/>
-      <StatCard label="Already checked" value={checked.length} detail="Within the last 7 days" icon={ClipboardCheck}/>
+      <StatCard label={tr("Total villas")} value={records.length} detail={tr("Managed properties")} icon={Building2}/>
+      <StatCard label={tr("Need checking")} value={missing.length} detail={tr("Overdue or never checked")} icon={CircleAlert}/>
+      <StatCard label={tr("Already checked")} value={checked.length} detail={tr("Within the last 7 days")} icon={ClipboardCheck}/>
     </div>
     {error && <div className="warning-banner" role="alert"><CircleAlert size={18}/>{error}</div>}
     {notice && <div role="status" aria-live="polite" style={{
@@ -1952,7 +2181,7 @@ function WeeklyOperationsPage({ kind, token, villas }) {
     }}>
       <ClipboardCheck size={23} style={{ flexShrink: 0, marginTop: 2 }}/>
       <div style={{ flex: 1, minWidth: 0 }}>
-        <strong style={{ display: "block", fontSize: 15, marginBottom: 4 }}>Record saved successfully</strong>
+        <strong style={{ display: "block", fontSize: 15, marginBottom: 4 }}>{tr("Record saved successfully")}</strong>
         <span style={{ fontSize: 12, lineHeight: 1.5 }}>{notice}</span>
       </div>
       <button type="button" aria-label="Dismiss success message" onClick={() => setNotice("")}
@@ -1960,7 +2189,7 @@ function WeeklyOperationsPage({ kind, token, villas }) {
         <X size={18}/>
       </button>
     </div>}
-    {loading && <p className="muted">Loading inspection status...</p>}
+    {loading && <p className="muted">{tr("Loading inspection status...")}</p>}
     {statusTable(missingFiltered, needsSearch, setNeedsSearch, missingSafePage, setNeedsPage, true)}
     {statusTable(checkedFiltered, checkedSearch, setCheckedSearch, checkedSafePage, setCheckedPage, false)}
     <section id="weekly-record-form" className="panel" style={{ marginTop: 24, overflow: "hidden" }}>
@@ -1971,7 +2200,7 @@ function WeeklyOperationsPage({ kind, token, villas }) {
             {isWater ? <Droplets size={23} /> : <ClipboardCheck size={23} />}
           </span>
           <div>
-            <h2 style={{ margin: 0, fontSize: 23, color: "#35483b" }}>Record {isWater ? "water measurement" : "house check"}</h2>
+            <h2 style={{ margin: 0, fontSize: 23, color: "#35483b" }}>Record {isWater ? tr("water measurement") : tr("house check")}</h2>
             <p className="muted" style={{ margin: "5px 0 0", fontSize: 13 }}>Complete the details below to update the villa's weekly compliance status.</p>
           </div>
         </div>
@@ -1984,15 +2213,15 @@ function WeeklyOperationsPage({ kind, token, villas }) {
             <p className="muted" style={{ margin: "5px 0 0", fontSize: 12 }}>Identify the villa, visit time and responsible team member.</p>
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(230px, 1fr))", gap: 18 }}>
-            <label style={operationLabelStyle}>Villa <span style={{ color: "#b55d53" }}>*</span>
+            <label style={operationLabelStyle}>{tr("Villa")} <span style={{ color: "#b55d53" }}>*</span>
               <select required value={selectedHouse} onChange={(e) => { setSelectedHouse(e.target.value); setForm((prev) => ({ ...prev, tank: "" })); }} style={operationInputStyle}>
-                <option value="">Select a villa</option>{villas.map((v) => <option key={v.id} value={v.id}>{v.name}</option>)}
+                <option value="">{tr("Select a villa")}</option>{villas.map((v) => <option key={v.id} value={v.id}>{v.name}</option>)}
               </select>
             </label>
             <label style={operationLabelStyle}>Inspection date & time <span style={{ color: "#b55d53" }}>*</span>
               <input required type="datetime-local" value={checkedAt} max={nowValue()} onChange={(e) => setCheckedAt(e.target.value)} style={operationInputStyle}/>
             </label>
-            <label style={operationLabelStyle}>Checked by <span style={{ color: "#b55d53" }}>*</span>
+            <label style={operationLabelStyle}>{tr("Checked by")} <span style={{ color: "#b55d53" }}>*</span>
               <input required value={form.checked_by} onChange={(e) => setForm((p) => ({ ...p, checked_by: e.target.value }))} placeholder="Full name of inspector" style={operationInputStyle}/>
             </label>
           </div>
@@ -2033,7 +2262,7 @@ function WeeklyOperationsPage({ kind, token, villas }) {
               {(form.method === "tank" || form.method === "both") && <>
                 <label style={operationLabelStyle}>Water tank <span style={{ color: "#b55d53" }}>*</span>
                   <select required value={form.tank} onChange={(e) => setForm((p) => ({ ...p, tank: e.target.value }))} style={operationInputStyle}>
-                    <option value="">Select a water tank</option>{houseTanks.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+                    <option value="">{tr("Select a water tank")}</option>{houseTanks.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
                   </select>
                   {!houseTanks.length && <span style={{ ...operationHelpStyle, color: "#ad5751" }}>No tank is configured for this villa. Add one in Django Admin.</span>}
                 </label>
@@ -2077,7 +2306,7 @@ function WeeklyOperationsPage({ kind, token, villas }) {
       </div>
       {historyError && <div className="warning-banner" role="alert"><CircleAlert size={18}/>{historyError}</div>}
       {!historyError && (visibleHistory.length ? <div className="table-scroll"><table>
-        <thead><tr><th>Measurement date</th><th>Villa</th><th>Source</th><th>Reading / level</th><th>Checked by</th><th>Notes</th></tr></thead>
+        <thead><tr><th>{tr("Measurement date")}</th><th>{tr("Villa")}</th><th>{tr("Source")}</th><th>{tr("Reading / level")}</th><th>{tr("Checked by")}</th><th>{tr("Notes")}</th></tr></thead>
         <tbody>{visibleHistory.map((item) => {
           const villaName = villas.find((villa) => String(villa.id) === String(item.house_id))?.name || (item.house_id ? `Villa #${item.house_id}` : "—");
           const dt = new Date(item.date);
@@ -2118,7 +2347,7 @@ function WeeklyOperationsPage({ kind, token, villas }) {
         <div className="table-scroll">
           <table>
             <thead><tr>
-              <th>Inspection date</th><th>Villa</th><th>Checked by</th><th>Condition</th><th>Notes</th>
+              <th>{tr("Inspection date")}</th><th>{tr("Villa")}</th><th>{tr("Checked by")}</th><th>{tr("Condition")}</th><th>{tr("Notes")}</th>
             </tr></thead>
             <tbody>{visibleHistory.map((item) => {
               const villaName = item.house_name || villas.find((villa) => String(villa.id) === String(item.house))?.name || `Villa #${item.house}`;
@@ -2207,14 +2436,14 @@ function ImportantJobsPage({ token, customers }) {
   const field = {padding:'10px', border:'1px solid #d9e2d9', borderRadius:8, width:'100%', boxSizing:'border-box'};
   const blank = {customer:'', description:'', deadline:getTodayLocalDate(), procedure_days:1};
   return <>
-    <div className="welcome-row"><div><p className="eyebrow">OPERATIONS / DEADLINES</p><h1>Important Jobs</h1><p className="muted">Plan ahead, track urgency and complete your duties.</p></div><div style={{display:'flex',gap:8,flexWrap:'wrap'}}><button className="refresh-button" disabled={loading || busy} onClick={()=>setRevision(v=>v+1)}><RefreshCw size={16}/> Refresh</button><button className="primary-button" disabled={busy} onClick={()=>setEditing({...blank})}>+ New job</button></div></div>
+    <div className="welcome-row"><div><p className="eyebrow">{tr("OPERATIONS / DEADLINES")}</p><h1>{tr("Important Jobs")}</h1><p className="muted">{tr("Plan ahead, track urgency and complete your duties.")}</p></div><div style={{display:'flex',gap:8,flexWrap:'wrap'}}><button className="refresh-button" disabled={loading || busy} onClick={()=>setRevision(v=>v+1)}><RefreshCw size={16}/> {tr("Refresh")}</button><button className="primary-button" disabled={busy} onClick={()=>setEditing({...blank})}>{"+ " + tr("Add Job")}</button></div></div>
     {error && <div className="error-banner" role="alert">{error}</div>}
-    <div className="stats-grid"><StatCard label="Pending jobs" value={pending.length} detail="All open duties" icon={ClipboardList}/><StatCard label="Critical / overdue" value={pending.filter(j=>['critical','overdue'].includes(j.importance)).length} detail="Immediate attention" icon={CircleAlert}/><StatCard label="Email threshold reached" value={pending.filter(j=>j.email_required).length} detail="Within 1.5 × procedure days" icon={Bell}/><StatCard label="Completed" value={completed.length} detail="Job history" icon={ClipboardCheck}/></div>
+    <div className="stats-grid"><StatCard label={tr("Pending jobs")} value={pending.length} detail={tr("All open duties")} icon={ClipboardList}/><StatCard label={tr("Critical / overdue")} value={pending.filter(j=>['critical','overdue'].includes(j.importance)).length} detail={tr("Immediate attention")} icon={CircleAlert}/><StatCard label="Email threshold reached" value={pending.filter(j=>j.email_required).length} detail="Within 1.5 × procedure days" icon={Bell}/><StatCard label={tr("Completed")} value={completed.length} detail={tr("Job history")} icon={ClipboardCheck}/></div>
     <section className="panel" style={{marginTop:20}}><div className="panel-heading"><div><p className="eyebrow">PRIORITY DISTRIBUTION</p><h2>Pending workload</h2></div></div>{pending.length ? <div style={{height:240}}><ResponsiveContainer width="100%" height="100%"><BarChart data={chart}><CartesianGrid vertical={false} strokeDasharray="3 3"/><XAxis dataKey="label" tick={{fontSize:11}}/><YAxis allowDecimals={false}/><Tooltip/><Bar dataKey="value" name="Jobs" radius={[6,6,0,0]} maxBarSize={55}>{chart.map(l=><Cell key={l.key} fill={l.color}/>)}</Bar></BarChart></ResponsiveContainer></div> : <p className="muted">No pending jobs to chart.</p>}</section>
-    {editing && <form className="panel" style={{marginTop:20}} onSubmit={e=>{e.preventDefault();mutate(editing.id?`${endpoint}${editing.id}/`:endpoint,{customer:editing.customer,description:editing.description,deadline:editing.deadline,procedure_days:Number(editing.procedure_days)},editing.id?'PATCH':'POST');}}><h2>{editing.id?'Edit job':'New job'}</h2><div style={{display:'grid',gap:12,gridTemplateColumns:'repeat(auto-fit,minmax(180px,1fr))'}}><label>Customer<select required style={field} value={editing.customer} onChange={e=>setEditing({...editing,customer:e.target.value})}><option value="">Select customer</option>{customers.map(c=><option key={c.id} value={c.id}>{c.name || c.full_name || `Customer #${c.id}`}</option>)}</select></label><label>Deadline<input required type="date" style={field} value={editing.deadline} onChange={e=>setEditing({...editing,deadline:e.target.value})}/></label><label>Procedure days<input required type="number" min="1" step="1" style={field} value={editing.procedure_days} onChange={e=>setEditing({...editing,procedure_days:e.target.value})}/></label></div><label style={{display:'block',marginTop:12}}>Description<textarea required rows={3} style={field} value={editing.description} onChange={e=>setEditing({...editing,description:e.target.value})}/></label><div style={{display:'flex',gap:8,marginTop:12}}><button className="primary-button" disabled={busy}>Save job</button><button type="button" className="refresh-button" disabled={busy} onClick={()=>setEditing(null)}>Cancel</button></div></form>}
-    <section className="panel" style={{marginTop:20}}><div className="panel-heading" style={{flexWrap:'wrap'}}><div><p className="eyebrow">JOB REGISTER</p><h2>{tab==='pending'?'Pending duties':'Completed duties'}</h2></div><div style={{display:'flex',gap:8}}>{['pending','completed'].map(t=><button key={t} className={tab===t?'primary-button':'refresh-button'} aria-pressed={tab===t} onClick={()=>setTab(t)}>{t==='pending'?`Pending (${pending.length})`:`Completed (${completed.length})`}</button>)}</div></div><div className="search-box" style={{maxWidth:360,marginBottom:16}}><Search size={17}/><input aria-label="Search jobs" placeholder="Search customer or job..." value={search} onChange={e=>setSearch(e.target.value)}/></div>
-    {loading && <p className="muted">Loading reminders…</p>}{!loading && !error && !visible.length && <div className="empty-state">No matching jobs.</div>}
-    <div style={{display:'grid',gap:14}}>{visible.map(j=>{const l=j.completed?{label:'Completed',color:'#64748b'}:levelFor(j); const remaining=Number(j.days_remaining); const duration=Number(j.procedure_days); const pct=Math.max(0,Math.min(100,remaining/(duration*1.5)*100)); return <article key={j.id} style={{border:'1px solid #e4e7df',borderLeft:`5px solid ${l.color}`,borderRadius:12,padding:18,background:'rgba(255,255,255,.65)'}}><div style={{display:'flex',justifyContent:'space-between',gap:12,flexWrap:'wrap'}}><strong style={{fontSize:17,color:'#3f493f'}}>{j.customer_name}</strong><strong style={{color:l.color,fontSize:13}}>{l.label.toUpperCase()}</strong></div><p style={{whiteSpace:'pre-wrap',overflowWrap:'anywhere',margin:'10px 0 16px'}}>{j.description}</p><div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(130px,1fr))',gap:12}}>{[['Deadline',dateLabel(j.deadline)],['Procedure',`${duration} days`],['Recommended start',dateLabel(j.recommended_start_date)],['Latest start',dateLabel(j.latest_start_date)],...(j.completed?[['Completed',dateLabel(j.completed_at)]]:[['Time remaining',remaining<0?`${-remaining} days overdue`:`${remaining} days`],['Spare days',j.spare_days]])].map(([label,value])=><div key={label}><div className="muted" style={{fontSize:12}}>{label}</div><strong>{value}</strong></div>)}</div>{!j.completed && <div style={{marginTop:16}}><div className="muted" style={{fontSize:12,marginBottom:6}}>Time remaining relative to notification window ({duration*1.5} days)</div><div role="progressbar" aria-label="Remaining notification window" aria-valuenow={Math.round(pct)} style={{height:8,background:'#e6e9e2',borderRadius:8,overflow:'hidden'}}><div style={{width:`${pct}%`,height:'100%',background:l.color}}/></div><p className="muted" style={{fontSize:12}}>{j.last_notification_at?`Last email: ${dateLabel(j.last_notification_at)} (${j.last_notification_level})`:j.email_required?'Email threshold reached — awaiting scheduled check':'Email threshold not reached'}</p></div>}<div style={{display:'flex',gap:8,flexWrap:'wrap',marginTop:12}}><button className="refresh-button" disabled={busy} onClick={()=>setEditing({...j})}>Edit</button><button className="primary-button" disabled={busy} onClick={()=>mutate(`${endpoint}${j.id}/${j.completed?'reopen':'complete'}/`)}><ClipboardCheck size={16}/>{j.completed?'Reopen job':'Mark completed'}</button></div></article>})}</div></section>
+    {editing && <form className="panel" style={{marginTop:20}} onSubmit={e=>{e.preventDefault();mutate(editing.id?`${endpoint}${editing.id}/`:endpoint,{customer:editing.customer,description:editing.description,deadline:editing.deadline,procedure_days:Number(editing.procedure_days)},editing.id?'PATCH':'POST');}}><h2>{editing.id?tr("Edit job"):tr("New job")}</h2><div style={{display:'grid',gap:12,gridTemplateColumns:'repeat(auto-fit,minmax(180px,1fr))'}}><label>{tr("Customer")}<select required style={field} value={editing.customer} onChange={e=>setEditing({...editing,customer:e.target.value})}><option value="">{tr("Select customer")}</option>{customers.map(c=><option key={c.id} value={c.id}>{c.name || c.full_name || `Customer #${c.id}`}</option>)}</select></label><label>{tr("Deadline")}<input required type="date" style={field} value={editing.deadline} onChange={e=>setEditing({...editing,deadline:e.target.value})}/></label><label>{tr("Procedure days")}<input required type="number" min="1" step="1" style={field} value={editing.procedure_days} onChange={e=>setEditing({...editing,procedure_days:e.target.value})}/></label></div><label style={{display:'block',marginTop:12}}>{tr("Description")}<textarea required rows={3} style={field} value={editing.description} onChange={e=>setEditing({...editing,description:e.target.value})}/></label><div style={{display:'flex',gap:8,marginTop:12}}><button className="primary-button" disabled={busy}>{tr("Save job")}</button><button type="button" className="refresh-button" disabled={busy} onClick={()=>setEditing(null)}>{tr("Cancel")}</button></div></form>}
+    <section className="panel" style={{marginTop:20}}><div className="panel-heading" style={{flexWrap:'wrap'}}><div><p className="eyebrow">{tr("JOB REGISTER")}</p><h2>{tab==='pending'?tr("Pending duties"):tr("Completed duties")}</h2></div><div style={{display:'flex',gap:8}}>{['pending','completed'].map(t=><button key={t} className={tab===t?'primary-button':'refresh-button'} aria-pressed={tab===t} onClick={()=>setTab(t)}>{t==='pending'?`Pending (${pending.length})`:`Completed (${completed.length})`}</button>)}</div></div><div className="search-box" style={{maxWidth:360,marginBottom:16}}><Search size={17}/><input aria-label="Search jobs" placeholder={tr("Search customer or job...")} value={search} onChange={e=>setSearch(e.target.value)}/></div>
+    {loading && <p className="muted">Loading reminders…</p>}{!loading && !error && !visible.length && <div className="empty-state">{tr("No matching jobs.")}</div>}
+    <div style={{display:'grid',gap:14}}>{visible.map(j=>{const l=j.completed?{label:'Completed',color:'#64748b'}:levelFor(j); const remaining=Number(j.days_remaining); const duration=Number(j.procedure_days); const pct=Math.max(0,Math.min(100,remaining/(duration*1.5)*100)); return <article key={j.id} style={{border:'1px solid #e4e7df',borderLeft:`5px solid ${l.color}`,borderRadius:12,padding:18,background:'rgba(255,255,255,.65)'}}><div style={{display:'flex',justifyContent:'space-between',gap:12,flexWrap:'wrap'}}><strong style={{fontSize:17,color:'#3f493f'}}>{j.customer_name}</strong><strong style={{color:l.color,fontSize:13}}>{tr(l.label.toUpperCase())}</strong></div><p style={{whiteSpace:'pre-wrap',overflowWrap:'anywhere',margin:'10px 0 16px'}}>{j.description}</p><div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(130px,1fr))',gap:12}}>{[['Deadline',dateLabel(j.deadline)],['Procedure',`${duration} days`],['Recommended start',dateLabel(j.recommended_start_date)],['Latest start',dateLabel(j.latest_start_date)],...(j.completed?[['Completed',dateLabel(j.completed_at)]]:[['Time remaining',remaining<0?`${-remaining} days overdue`:`${remaining} days`],['Spare days',j.spare_days]])].map(([label,value])=><div key={label}><div className="muted" style={{fontSize:12}}>{tr(label)}</div><strong>{value}</strong></div>)}</div>{!j.completed && <div style={{marginTop:16}}><div className="muted" style={{fontSize:12,marginBottom:6}}>Time remaining relative to notification window ({duration*1.5} days)</div><div role="progressbar" aria-label="Remaining notification window" aria-valuenow={Math.round(pct)} style={{height:8,background:'#e6e9e2',borderRadius:8,overflow:'hidden'}}><div style={{width:`${pct}%`,height:'100%',background:l.color}}/></div><p className="muted" style={{fontSize:12}}>{j.last_notification_at?`Last email: ${dateLabel(j.last_notification_at)} (${j.last_notification_level})`:j.email_required?'Email threshold reached — awaiting scheduled check':'Email threshold not reached'}</p></div>}<div style={{display:'flex',gap:8,flexWrap:'wrap',marginTop:12}}><button className="refresh-button" disabled={busy} onClick={()=>setEditing({...j})}>{tr("Edit")}</button><button className="primary-button" disabled={busy} onClick={()=>mutate(`${endpoint}${j.id}/${j.completed?'reopen':'complete'}/`)}><ClipboardCheck size={16}/>{j.completed?tr("Reopen job"):tr("Mark completed")}</button></div></article>})}</div></section>
   </>;
 }
 
@@ -2268,12 +2497,12 @@ function CompanyGasPage({ token, employees }) {
   const field={padding:'10px 12px',border:'1px solid #d9e2d9',borderRadius:8,maxWidth:'100%'};
   const chart = (items, horizontal=false) => items.length ? <div style={{height:horizontal?Math.max(220,items.length*42+45):270,width:'100%'}}><ResponsiveContainer width="100%" height="100%"><BarChart data={items} layout={horizontal?'vertical':'horizontal'} margin={{top:10,right:20,left:horizontal?12:0,bottom:12}}><CartesianGrid strokeDasharray="3 3" vertical={horizontal} horizontal={!horizontal}/>{horizontal?<><XAxis type="number" tickFormatter={v=>`€${v}`}/><YAxis type="category" dataKey="name" width={145} tick={{fontSize:11}}/></>:<><XAxis dataKey="name" tick={{fontSize:11}}/><YAxis tickFormatter={v=>`€${v}`}/></>}<Tooltip formatter={v=>money(v)}/><Bar dataKey="amount" name="Fuel expense" fill={horizontal?'#718477':'#b99b65'} maxBarSize={45} radius={horizontal?[0,5,5,0]:[5,5,0,0]}/></BarChart></ResponsiveContainer></div>:<div className="empty-state">No fuel expenses to chart.</div>;
   return <>
-    <div className="welcome-row"><div><p className="eyebrow">COMPANY EXPENSES / FUEL</p><h1>Company Gas</h1><p className="muted">Fuel expenses paid by the company for employees.</p></div><button className="refresh-button" disabled={loading} onClick={()=>setRevision(v=>v+1)}><RefreshCw size={16}/> Refresh data</button></div>
+    <div className="welcome-row"><div><p className="eyebrow">{tr("COMPANY EXPENSES / FUEL")}</p><h1>{tr("Company Gas")}</h1><p className="muted">{tr("Fuel expenses paid by the company for employees.")}</p></div><AddRecord page="companyGas"/></div>
     {error && <div className="error-message" role="alert">{error}</div>}
     {loading && <p className="muted">Loading fuel records…</p>}
     {!loading && !error && <>
-    <section className="panel" style={{marginBottom:20}}><div style={{display:'flex',gap:12,flexWrap:'wrap',alignItems:'end'}}><label>Month<br/><input type="month" style={field} value={month} onChange={e=>{setMonth(e.target.value);setPage(1);}}/></label><label>Employee<br/><select style={field} value={employee} onChange={e=>{setEmployee(e.target.value);setPage(1);}}><option value="">All employees</option>{[...new Map(rows.map(r=>[r.employeeId,r.employeeLabel]))].sort((a,b)=>a[1].localeCompare(b[1])).map(([id,name])=><option key={id} value={id}>{name}</option>)}</select></label><label>Fuel type<br/><select style={field} value={fuel} onChange={e=>{setFuel(e.target.value);setPage(1);}}><option value="">All fuels</option>{Object.entries(types).map(([k,v])=><option key={k} value={k}>{v}</option>)}</select></label><button className="refresh-button" onClick={()=>{setMonth('');setEmployee('');setFuel('');setSearch('');setPage(1);}}>Clear filters</button></div></section>
-    <div className="stats-grid"><StatCard label="Total fuel cost" value={money(total)} detail="Selected records" icon={Wallet}/><StatCard label="Fuel purchases" value={filtered.length} detail="Recorded transactions" icon={Truck}/><StatCard label="Employees" value={new Set(filtered.map(r=>r.employeeId)).size} detail="With fuel expenses" icon={Users}/><StatCard label="Average purchase" value={money(filtered.length?total/filtered.length:0)} detail="Cost per transaction" icon={CreditCard}/></div>
+    <section className="panel" style={{marginBottom:20}}><div style={{display:'flex',gap:12,flexWrap:'wrap',alignItems:'end'}}><label>{tr("Month")}<br/><input type="month" style={field} value={month} onChange={e=>{setMonth(e.target.value);setPage(1);}}/></label><label>{tr("Employee")}<br/><select style={field} value={employee} onChange={e=>{setEmployee(e.target.value);setPage(1);}}><option value="">{tr("All employees")}</option>{[...new Map(rows.map(r=>[r.employeeId,r.employeeLabel]))].sort((a,b)=>a[1].localeCompare(b[1])).map(([id,name])=><option key={id} value={id}>{name}</option>)}</select></label><label>{tr("Fuel type")}<br/><select style={field} value={fuel} onChange={e=>{setFuel(e.target.value);setPage(1);}}><option value="">{tr("All fuels")}</option>{Object.entries(types).map(([k,v])=><option key={k} value={k}>{v}</option>)}</select></label><button className="refresh-button" onClick={()=>{setMonth('');setEmployee('');setFuel('');setSearch('');setPage(1);}}>{tr("Clear filters")}</button></div></section>
+    <div className="stats-grid"><StatCard label="Total fuel cost" value={money(total)} detail="Selected records" icon={Wallet}/><StatCard label="Fuel purchases" value={filtered.length} detail="Recorded transactions" icon={Truck}/><StatCard label={tr("Employees")} value={new Set(filtered.map(r=>r.employeeId)).size} detail="With fuel expenses" icon={Users}/><StatCard label="Average purchase" value={money(filtered.length?total/filtered.length:0)} detail="Cost per transaction" icon={CreditCard}/></div>
     <section className="panel" style={{marginTop:20}}><div className="panel-heading"><div><p className="eyebrow">MONTHLY TREND</p><h2>Fuel expenses by month</h2></div></div>{chart(monthly)}</section>
     <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(min(100%,340px),1fr))',gap:18,marginTop:20}}><section className="panel" style={{minWidth:0}}><h2>Cost by employee</h2>{chart(byEmployee,true)}</section><section className="panel" style={{minWidth:0}}><h2>Fuel type distribution</h2>{total>0?<div style={{height:300}}><ResponsiveContainer width="100%" height="100%"><PieChart><Pie data={byFuel} dataKey="amount" nameKey="name" innerRadius="45%" outerRadius="75%" label={({percent})=>`${Math.round(percent*100)}%`}>{byFuel.map((r,i)=><Cell key={r.name} fill={colors[i%colors.length]}/>)}</Pie><Tooltip formatter={v=>money(v)}/><Legend/></PieChart></ResponsiveContainer></div>:<div className="empty-state">No positive expenses to chart.</div>}</section></div>
     <div style={{marginTop:20}}>
@@ -2284,7 +2513,7 @@ function CompanyGasPage({ token, employees }) {
         onSearchChange={v=>{setSearch(v);setPage(1);}}
         searchPlaceholder="Search employee, department, fuel, amount, date..."
         emptyMessage="No matching fuel expenses."
-        headerActions={<label style={{display:'flex',alignItems:'center',gap:8}}>Rows per page <select style={field} value={pageSize} onChange={e=>{setPageSize(Number(e.target.value));setPage(1);}}>{[10,25,50,100].map(n=><option key={n} value={n}>{n}</option>)}</select></label>}
+        headerActions={<label style={{display:'flex',alignItems:'center',gap:8}}>{tr("Rows per page")} <select style={field} value={pageSize} onChange={e=>{setPageSize(Number(e.target.value));setPage(1);}}>{[10,25,50,100].map(n=><option key={n} value={n}>{n}</option>)}</select></label>}
         columns={[
           {label:'Date',render:r=>dateLabel(r.date)},
           {label:'Employee',key:'employeeLabel'},
@@ -2298,7 +2527,7 @@ function CompanyGasPage({ token, employees }) {
             try { url = new URL(r.invoice_pdf, new URL(API_URL, window.location.origin).origin + '/'); }
             catch { return 'Invalid invoice link'; }
             if (!['http:','https:'].includes(url.protocol)) return 'Invalid invoice link';
-            return <a className="refresh-button" style={{display:'inline-flex',alignItems:'center',gap:6,textDecoration:'none',whiteSpace:'nowrap'}} href={url.href} target="_blank" rel="noopener noreferrer">Open PDF ↗</a>;
+            return <a className="refresh-button" style={{display:'inline-flex',alignItems:'center',gap:6,textDecoration:'none',whiteSpace:'nowrap'}} href={url.href} target="_blank" rel="noopener noreferrer">{tr("Open PDF ↗")}</a>;
           }}
         ]}/>
       <div style={{padding:'12px 4px',display:'flex',justifyContent:'space-between',flexWrap:'wrap',gap:8}}>
@@ -2312,6 +2541,9 @@ function CompanyGasPage({ token, employees }) {
 }
 
 export default function App() {
+  const [language, setLanguage] = useState(() => localStorage.getItem("pk_language") === "el" ? "el" : "en");
+  uiLanguage = language;
+  useEffect(() => { document.documentElement.lang = language; localStorage.setItem("pk_language", language); }, [language]);
   const [token, setToken] = useState(
     () => localStorage.getItem("pk_access_token")
   );
@@ -2942,7 +3174,7 @@ export default function App() {
               }}
             >
               <Icon size={18} strokeWidth={1.7} />
-              <span>{label}</span>
+              <span>{tr(label)}</span>
             </button>
           ))}
         </nav>
@@ -2950,12 +3182,12 @@ export default function App() {
         <div className="sidebar-bottom">
           <div className="connection-status">
             <span className="status-dot" />
-            Django API connected
+            {tr("Django API connected")}
           </div>
 
           <button className="nav-item" onClick={logout}>
             <LogOut size={18} />
-            <span>Sign out</span>
+            <span>{tr("Sign out")}</span>
           </button>
         </div>
       </aside>
@@ -2965,23 +3197,24 @@ export default function App() {
           <button
             className="mobile-menu"
             onClick={() => setSidebarOpen(true)}
-            aria-label="Open menu"
+            aria-label={tr("Open menu")}
           >
             <Menu />
           </button>
 
           <div className="topbar-title">
             Paros <span>/</span>{" "}
-            {activePage === "importantJobs" ? "Important Jobs" : activePage === "overview" ? "Overview" : currentPage?.title}
+            {tr(navigation.find(item => item.id === activePage)?.label || "Overview")}
           </div>
 
           <div className="topbar-actions">
+            <button type="button" className="icon-button" title={language === "el" ? "English" : "Ελληνικά"} aria-label={language === "el" ? "English" : "Ελληνικά"} onClick={() => setLanguage(v => v === "el" ? "en" : "el")}>{language === "el" ? "🇬🇧 EN" : "🇬🇷 EL"}</button>
             <div className="search-box">
               <Search size={17} />
               <input
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search work entries..."
+                placeholder={tr("Search work entries...")}
               />
             </div>
 
@@ -3063,8 +3296,8 @@ export default function App() {
             <>
               <div className="welcome-row">
                 <div>
-                  <p className="eyebrow">PROPERTY OPERATIONS</p>
-                  <h1>Data Analytics </h1>
+                  <p className="eyebrow">{tr("PROPERTY OPERATIONS")}</p>
+                  <h1>{tr("Data Analytics")} </h1>
                   <p className="muted">
                     Your villa management overview, bringing together operations, services and financial performance — all powered by your business data.
                   </p>
@@ -3078,28 +3311,28 @@ export default function App() {
 
               <div className="stats-grid">
                 <StatCard
-                  label="Registered Villas"
+                  label={tr("Registered Villas")}
                   value={data.villas.length}
                   detail="Villas in your database"
                   icon={Building2}
                 />
 
                 <StatCard
-                  label="Customers"
+                  label={tr("Customers")}
                   value={data.customers.length}
                   detail="Registered customers"
                   icon={Users}
                 />
 
                 <StatCard
-                  label="Employees"
+                  label={tr("Employees")}
                   value={data.employees.length}
                   detail="Employee records"
                   icon={UserRound}
                 />
 
                 <StatCard
-                  label="Work Entries"
+                  label={tr("Work Entries")}
                   value={data.workEntries.length}
                   detail="Recorded work entries"
                   icon={ClipboardList}
@@ -3331,7 +3564,7 @@ export default function App() {
 
                             <Bar
                               dataKey="grossMargin"
-                              name="Gross margin"
+                              name={tr("Gross margin")}
                               fill="#718477"
                               radius={[4, 4, 0, 0]}
                               maxBarSize={36}
@@ -3376,7 +3609,7 @@ export default function App() {
 
                           <Bar
                             dataKey="income"
-                            name="Revenue"
+                            name={tr("Revenue")}
                             fill="#b99b65"
                             radius={[4, 4, 0, 0]}
                             maxBarSize={36}
@@ -3384,7 +3617,7 @@ export default function App() {
 
                           <Bar
                             dataKey="outcome"
-                            name="Expenses"
+                            name={tr("Expenses")}
                             fill="#718477"
                             radius={[4, 4, 0, 0]}
                             maxBarSize={36}
@@ -3418,7 +3651,7 @@ export default function App() {
                     ["Invoices", data.invoices.length],
                   ].map(([label, value]) => (
                     <div className="breakdown-row" key={label}>
-                      <span>{label}</span>
+                      <span>{tr(label)}</span>
                       <strong>{value}</strong>
                     </div>
                   ))}
@@ -3434,7 +3667,7 @@ export default function App() {
                 rows={paginatedRecentWork}
                 totalCount={filteredRecentWork.length}
                 searchValue={recentWorkSearch}
-                searchPlaceholder="Search work entries..."
+                searchPlaceholder={tr("Search work entries...")}
                 onSearchChange={(value) => {
                   setRecentWorkSearch(value);
                   setRecentWorkPage(1);
@@ -3477,24 +3710,21 @@ export default function App() {
             <>
               <div className="welcome-row">
                 <div>
-                  <p className="eyebrow">PROPERTY PERFORMANCE</p>
-                  <h1>Villas</h1>
+                  <p className="eyebrow">{tr("PROPERTY PERFORMANCE")}</p>
+                  <h1>{tr("Villas")}</h1>
                   <p className="muted">
                     Compare villa revenue and gross profit, with the highest-revenue properties first.
                   </p>
                 </div>
 
-                <button className="refresh-button" onClick={loadDashboard}>
-                  <RefreshCw size={16} />
-                  Refresh data
-                </button>
+                <AddRecord page={activePage}/>
               </div>
 
               <section className="panel table-panel">
                 <div className="panel-heading">
                   <div>
-                    <p className="eyebrow">VILLA FINANCIAL SUMMARY</p>
-                    <h2>Villa revenue & gross profit</h2>
+                    <p className="eyebrow">{tr("VILLA FINANCIAL SUMMARY")}</p>
+                    <h2>{tr("Villa revenue & gross profit")}</h2>
                   </div>
                   <span className="record-count">
                     {filteredVillaTable.length} villas
@@ -3526,10 +3756,10 @@ export default function App() {
                     <table>
                       <thead>
                         <tr>
-                          <th>Villa name</th>
-                          <th>Area</th>
-                          <th>Revenue</th>
-                          <th>Gross profit</th>
+                          <th>{tr("Villa name")}</th>
+                          <th>{tr("Area")}</th>
+                          <th>{tr("Revenue")}</th>
+                          <th>{tr("Gross profit")}</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -3670,24 +3900,21 @@ export default function App() {
             <>
               <div className="welcome-row">
                 <div>
-                  <p className="eyebrow">DEPARTMENT PERFORMANCE</p>
-                  <h1>Departments</h1>
+                  <p className="eyebrow">{tr("DEPARTMENT PERFORMANCE")}</p>
+                  <h1>{tr("Departments")}</h1>
                   <p className="muted">
                     Compare department revenue and gross profit, with the highest-revenue departments first.
                   </p>
                 </div>
 
-                <button className="refresh-button" onClick={loadDashboard}>
-                  <RefreshCw size={16} />
-                  Refresh data
-                </button>
+                <AddRecord page={activePage}/>
               </div>
 
               <section className="panel table-panel">
                 <div className="panel-heading">
                   <div>
-                    <p className="eyebrow">DEPARTMENT FINANCIAL SUMMARY</p>
-                    <h2>Department revenue & gross profit</h2>
+                    <p className="eyebrow">{tr("DEPARTMENT FINANCIAL SUMMARY")}</p>
+                    <h2>{tr("Department revenue & gross profit")}</h2>
                   </div>
                   <span className="record-count">
                     {filteredDepartmentTable.length} departments
@@ -3719,9 +3946,9 @@ export default function App() {
                     <table>
                       <thead>
                         <tr>
-                          <th>Department</th>
-                          <th>Revenue</th>
-                          <th>Gross profit</th>
+                          <th>{tr("Department")}</th>
+                          <th>{tr("Revenue")}</th>
+                          <th>{tr("Gross profit")}</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -3859,11 +4086,11 @@ export default function App() {
             </>
           ) : activePage === "services" ? (
             <PerformancePage
-              eyebrow="SERVICE PERFORMANCE"
+              eyebrow={tr("SERVICE PERFORMANCE")}
               title="Services"
               subtitle="Compare revenue and gross profit generated by each service, with the highest-revenue services first."
-              tableEyebrow="SERVICE FINANCIAL SUMMARY"
-              tableTitle="Service revenue & gross profit"
+              tableEyebrow={tr("SERVICE FINANCIAL SUMMARY")}
+              tableTitle={tr("Service revenue & gross profit")}
               items={servicePerformanceData.map((item) => ({ ...item, name: item.name }))}
               tableColumns={[
                 { label: "Service type", key: "name" },
@@ -3871,20 +4098,20 @@ export default function App() {
                 { label: "Revenue", render: (item) => money(item.revenue) },
                 { label: "Gross profit", render: (item) => money(item.grossProfit) },
               ]}
-              searchPlaceholder="Search services or departments..."
-              chartSearchPlaceholder="Search service charts..."
-              revenueLabel="Revenue"
-              expenseLabel="Employee cost"
-              grossLabel="Gross profit"
+              searchPlaceholder={tr("Search services or departments...")}
+              chartSearchPlaceholder={tr("Search service charts...")}
+              revenueLabel={tr("Revenue")}
+              expenseLabel={tr("Employee cost")}
+              grossLabel={tr("Gross profit")}
               onRefresh={loadDashboard}
             />
           ) : activePage === "employees" ? (
             <PerformancePage
-              eyebrow="EMPLOYEE PERFORMANCE"
+              eyebrow={tr("EMPLOYEE PERFORMANCE")}
               title="Employees"
               subtitle="Review each employee's salary arrangement, customer revenue generated and gross earnings."
-              tableEyebrow="EMPLOYEE EARNINGS SUMMARY"
-              tableTitle="Salary, revenue earned & gross earned"
+              tableEyebrow={tr("EMPLOYEE EARNINGS SUMMARY")}
+              tableTitle={tr("Salary, revenue earned & gross earned")}
               items={employeePerformanceData.map((item) => ({ ...item, name: item.name }))}
               tableColumns={[
                 { label: "Employee", key: "name" },
@@ -3894,26 +4121,23 @@ export default function App() {
                 { label: "Revenue earned", render: (item) => money(item.revenue) },
                 { label: "Gross earned", render: (item) => money(item.grossProfit) },
               ]}
-              searchPlaceholder="Search employees, departments or salary type..."
-              chartSearchPlaceholder="Search employee charts..."
-              revenueLabel="Revenue earned"
-              expenseLabel="Recorded salary cost"
-              grossLabel="Gross earned"
+              searchPlaceholder={tr("Search employees, departments or salary type...")}
+              chartSearchPlaceholder={tr("Search employee charts...")}
+              revenueLabel={tr("Revenue earned")}
+              expenseLabel={tr("Recorded salary cost")}
+              grossLabel={tr("Gross earned")}
               onRefresh={loadDashboard}
             />
           ) : currentPage ? (
             <>
               <div className="welcome-row">
                 <div>
-                  <p className="eyebrow">PAROS KATOIKIA DATABASE</p>
-                  <h1>{currentPage.title}</h1>
-                  <p className="muted">{currentPage.subtitle}</p>
+                  <p className="eyebrow">{tr("PAROS KATOIKIA DATABASE")}</p>
+                  <h1>{tr(currentPage.title)}</h1>
+                  <p className="muted">{tr(currentPage.subtitle)}</p>
                 </div>
 
-                <button className="refresh-button" onClick={loadDashboard}>
-                  <RefreshCw size={16} />
-                  Refresh data
-                </button>
+                <AddRecord page={activePage}/>
               </div>
 
               {activePage === "workEntries" && (
