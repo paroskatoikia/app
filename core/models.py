@@ -1677,3 +1677,12 @@ class ImportantJobReminder(models.Model):
             }
 
         super().save(*args, **kwargs)
+
+
+
+class GroupedWorkEntry(WorkEntry):
+    class Meta:
+        proxy = True
+        ordering = ["work_date", "house__name", "pk"]
+        verbose_name = "Grouped work entry"
+        verbose_name_plural = "Grouped work entries"

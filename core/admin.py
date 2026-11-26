@@ -1411,3 +1411,173 @@ class ImportantJobReminderAdmin(admin.ModelAdmin):
             request,
             f"{count} jobs reopened.",
         )
+
+
+from .models import GroupedWorkEntry
+
+from datetime import date
+from django import forms
+from django.db import models
+from django.utils.html import format_html
+
+from .models import GroupedWorkEntry
+
+
+class WorkEntryMonthFilter(admin.SimpleListFilter):
+    title = "Billing month"
+    parameter_name = "billing_month"
+
+    def lookups(self, request, model_admin):
+        months = model_admin.get_queryset(request).dates(
+            "work_date", "month", order="DESC"
+        )
+
+        return [
+            (month.strftime("%Y-%m"), month.strftime("%B %Y"))
+            for month in months
+        ]
+
+    def queryset(self, request, queryset):
+        if self.value():
+            try:
+                month = date.fromisoformat(self.value() + "-01")
+            except ValueError:
+                return queryset.none()
+
+            return queryset.filter(
+                work_date__year=month.year,
+                work_date__month=month.month,
+            )
+
+        return queryset
+
+@admin.register(GroupedWorkEntry)
+class GroupedWorkEntryAdmin(WorkEntryAdmin):
+
+    change_list_template = "admin/change_list.html"
+
+    formfield_overrides = {
+        models.TextField: {
+            "widget": forms.Textarea(
+                attrs={
+                    "rows": 2,
+                    "cols": 30,
+                }
+            )
+        },
+    }
+
+    list_display = (
+        "work_date",
+        "employee",
+        "compact_service",
+        "hours",
+        "description",
+        "additional_charges",
+        "additional_charges_notes",
+        "total_customer_charge_display",
+    )
+
+    list_editable = (
+        "hours",
+        "description",
+        "additional_charges",
+        "additional_charges_notes",
+    )
+
+    list_filter = (
+        ("house", admin.RelatedOnlyFieldListFilter),
+        WorkEntryMonthFilter,
+        "house__customer",
+        "service",
+    )
+
+    def get_list_filter(self, request):
+        return self.list_filter
+
+    ordering = (
+        "work_date",
+        "house__name",
+        "pk",
+    )
+
+    date_hierarchy = "work_date"
+
+    list_per_page = 200
+    list_max_show_all = 1000
+
+    list_select_related = (
+        "house",
+        "employee",
+        "service__department",
+    )
+
+    @admin.display(
+        description="Service",
+        ordering="service__name",
+    )
+    def compact_service(self, obj):
+        return format_html(
+            '<div style="width:160px; '
+            'white-space:normal; '
+            'overflow-wrap:anywhere; '
+            'line-height:1.4;">{}</div>',
+            obj.service,
+        )
+
+    def get_readonly_fields(self, request, obj=None):
+        fields = super().get_readonly_fields(request, obj)
+
+        if obj:
+            return tuple(fields) + (
+                "employee",
+                "house",
+                "service",
+            )
+
+        return fields
+
+    def save_model(self, request, obj, form, change):
+        entry = (
+            WorkEntry.objects.get(pk=obj.pk)
+            if change else WorkEntry()
+        )
+
+        fields = (
+            "employee",
+            "house",
+            "service",
+            "work_date",
+            "hours",
+            "description",
+            "additional_charges",
+            "additional_charges_notes",
+        )
+
+        for field in fields:
+            if not change or field in form.changed_data:
+                setattr(entry, field, getattr(obj, field))
+
+        entry.save()
+
+        obj.pk = entry.pk
+        obj._state.adding = False
+        obj._state.db = entry._state.db
+
+        for field in (
+            "employee_salary_type_snapshot",
+            "employee_rate_snapshot",
+            "customer_hourly_rate_snapshot",
+            "employee_cost",
+            "customer_charge",
+            "created_at",
+        ):
+            setattr(obj, field, getattr(entry, field))
+
+    def delete_model(self, request, obj):
+        WorkEntry.objects.get(pk=obj.pk).delete()
+
+    def delete_queryset(self, request, queryset):
+        WorkEntry.objects.filter(
+            pk__in=queryset.values_list("pk", flat=True)
+        ).delete()

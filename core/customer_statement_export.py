@@ -541,7 +541,7 @@ def _program_active(program, start, next_month):
             and (program.end_date is None or program.end_date >= start))
 
 
-def export_customer_statement(customer, month=None):
+def export_customer_statement(customer, month=None, output_format="zip"):
     """Generate one monthly statement ZIP with the month's supporting invoices."""
     today = timezone.localdate()
     month = month or today.strftime('%Y-%m')
@@ -596,14 +596,30 @@ def export_customer_statement(customer, month=None):
     )
 
     check_activities = _customer_check_activity(villa_ids, start, cutoff)
+    if output_format == 'excel':
+        sheets = _statement_sheets(customer, start, opening_balance, works, invoices,
+                                   active_programs, payments, check_activities, villas=villas)
+        response = HttpResponse(_statement_xlsx(sheets), content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+        response['Content-Disposition'] = f'attachment; filename="Customer_{customer.pk}_Statement_{month}.xlsx"'
+        response['Cache-Control'] = 'private, no-store'
+        return response
     pdf = _build_monthly_pdf(customer, villas, works, invoices, active_programs,
                      payments, cutoff, period_start=start,
                       opening_balance=opening_balance,
                       check_activities=check_activities)
+    if output_format == 'pdf':
+        response = HttpResponse(pdf, content_type='application/pdf')
+        response['Content-Disposition'] = f'attachment; filename="Customer_{customer.pk}_Statement_{month}.pdf"'
+        response['Cache-Control'] = 'private, no-store'
+        return response
+    sheets = _statement_sheets(customer, start, opening_balance, works, invoices,
+                               active_programs, payments, check_activities, villas=villas)
+    excel = _statement_xlsx(sheets)
     output = BytesIO()
     prefix = f'Customer_{customer.pk}_{_safe(customer.name)}_{month}'
     with ZipFile(output, 'w', ZIP_DEFLATED) as archive:
         archive.writestr(f'{prefix}/Customer_Statement_{month}.pdf', pdf)
+        archive.writestr(f'{prefix}/Customer_Statement_{month}.xlsx', excel)
         if not invoices:
             archive.writestr(f'{prefix}/Invoices/NO_INVOICES.txt',
                              'No villa-linked invoices for this billing month.\n')
@@ -623,3 +639,81 @@ def export_customer_statement(customer, month=None):
         f'attachment; filename="Customer_{customer.pk}_Statement_{month}.zip"')
     response['Cache-Control'] = 'private, no-store'
     return response
+
+
+def _statement_sheets(customer, start, opening, works, invoices, programs, payments, checks, villas=None):
+    work = sum((D(w.customer_charge) for w in works), D(0))
+    extra = sum((D(w.additional_charges) for w in works), D(0))
+    fees = sum((D(p.price) for p in programs), D(0))
+    paid = sum((D(p.amount) for p in payments), D(0))
+    net, vat, gross = _vat_parts(work + fees)
+    def amount(v): return float(_money(v))
+    rows = [[start.strftime('%B %Y'), p.house.name, 'MONTHLY FEE: ' + p.get_program_type_display(), 'Monthly', 'Recurring monthly fee', amount(p.price)] for p in sorted(programs, key=lambda p: (p.house.name, str(p.program_type)))]
+    groups = [_work_rows(w) for w in works] + [[r] for r in checks]
+    for group in sorted(groups, key=lambda g: (g[0][0], g[0][1], g[0][2])):
+        for r in group:
+            rows.append([*r[:-1], float(r[-1].replace(' EUR', '').replace(',', ''))])
+    rows.extend([[label, '', '', '', '', amount(value)] for label, value in [
+        ('SUBTOTAL', net + extra), (f'VAT {VAT_RATE:.0%}', vat), ('PREVIOUS AMOUNT', opening),
+        ('PAYMENTS THIS MONTH (-)', -paid), ('TOTAL (excluding supplier invoices)', opening + gross + extra - paid)]])
+    headers = ['Period / Date', 'Villa', 'Service / Monthly Fee', 'Units', 'Work performed', 'Charge (EUR)']
+    if villas is not None and len(villas) <= 1:
+        headers.pop(1)
+        rows = [[r[0], *r[2:]] for r in rows]
+    return [{'name': 'Monthly work statement', 'headers': headers, 'rows': rows,
+             'customer': customer.name, 'month': start.strftime('%B %Y'),
+             'program_count': len(programs)}]
+
+
+def _statement_xlsx(sheets):
+    from openpyxl import Workbook
+    from openpyxl.styles import Font, PatternFill, Alignment
+    from openpyxl.utils import get_column_letter
+    wb = Workbook()
+    wb.remove(wb.active)
+    for sheet in sheets:
+        ws = wb.create_sheet(sheet['name'])
+        ws.append([sheet['customer'] + ' | ' + sheet['month']])
+        ws['A1'].data_type = 's'
+        ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=len(sheet['headers']))
+        ws['A1'].font = Font(bold=True, size=14, color='203D36')
+        ws.row_dimensions[1].height = 25
+        ws.append(sheet['headers'])
+        for row in sheet['rows']:
+            ws.append(row)
+            for cell in ws[ws.max_row]:
+                if isinstance(cell.value, str):
+                    cell.data_type = 's'  # Never interpret customer text as a formula.
+                elif isinstance(cell.value, (int, float)):
+                    cell.number_format = '#,##0.00;[Red]-#,##0.00'
+                cell.alignment = Alignment(vertical='top', wrap_text=True)
+        for cell in ws[2]:
+            cell.font = Font(bold=True, color='FFFFFF')
+            cell.fill = PatternFill('solid', fgColor='203D36')
+        widths = [19, 22, 33, 14, 65, 19] if len(sheet['headers']) == 6 else [19, 33, 14, 65, 19]
+        for i, width in enumerate(widths, 1):
+            ws.column_dimensions[get_column_letter(i)].width = width
+        from textwrap import wrap
+        for row in ws.iter_rows(min_row=3):
+            idx = row[0].row
+            footer = idx > ws.max_row - 5
+            fill = 'DDE6E1' if footer else ('E8E8E8' if idx <= 2 + sheet['program_count'] else ('F3F6F3' if idx % 2 == 0 else 'FFFFFF'))
+            lines = 1
+            for cell, width in zip(row, widths):
+                cell.fill = PatternFill('solid', fgColor=fill)
+                if footer:
+                    cell.font = Font(bold=True, color='203D36')
+                lines = max(lines, sum(max(1, len(wrap(line, width=max(8, int(width)-3)))) for line in str(cell.value or '').split('\n')))
+            ws.row_dimensions[idx].height = min(409, max(22, 15 * lines + 6))
+        ws.row_dimensions[2].height = 24
+        ws.freeze_panes = 'A3'
+        ws.print_area = ws.dimensions
+        ws.print_title_rows = '1:2'
+        ws.sheet_properties.pageSetUpPr.fitToPage = True
+        ws.page_setup.orientation = 'landscape'
+        ws.page_setup.paperSize = ws.PAPERSIZE_A4
+        ws.page_setup.fitToWidth = 1
+        ws.page_setup.fitToHeight = 0
+    output = BytesIO()
+    wb.save(output)
+    return output.getvalue()

@@ -17,6 +17,14 @@ const API_URL = (import.meta.env.VITE_API_URL || "http://127.0.0.1:8000/api").re
 
 let uiLanguage = typeof localStorage !== "undefined" && localStorage.getItem("pk_language") === "el" ? "el" : "en";
 const greek = {
+  "Customer statement": "Μηνιαία κατάσταση πελάτη",
+  "Download PDF": "Λήψη PDF",
+  "Download ZIP": "Λήψη ZIP",
+  "Preview": "Προεπισκόπηση",
+  "Preview PDF": "Προεπισκόπηση PDF",
+  "Preview Excel": "Προεπισκόπηση Excel",
+  "Download Excel": "Λήψη Excel",
+  "Close preview": "Κλείσιμο προεπισκόπησης",
   "Group by": "Ομαδοποίηση κατά",
   "No grouping": "Χωρίς ομαδοποίηση",
   "Month": "Μήνας",
@@ -1376,26 +1384,53 @@ function AccountAnalytics({ kind, data, onRefresh, token }) {
   const [exportError, setExportError] = useState("");
   const [exportMonth, setExportMonth] = useState(() => getTodayLocalDate().slice(0, 7));
 
-  async function downloadCustomerStatement(customer) {
+  function previewCustomerStatement(customer) {
+    if (!exportMonth) { setExportError("Select a billing month."); return; }
+    setExportError("");
+    const url = new URL("/admin/core/groupedworkentry/", new URL(API_URL, window.location.origin).origin);
+    url.searchParams.set("house__customer__id__exact", String(customer.id));
+    url.searchParams.set("billing_month", exportMonth);
+    window.open(url.href, "_blank", "noopener,noreferrer");
+  }
+
+  async function downloadCustomerStatement(customer, output = "zip") {
+    if (!exportMonth) { setExportError("Select a billing month."); return; }
     setExportingId(customer.id);
     setExportError("");
     try {
-      const response = await fetch(`${API_URL}/customers/${customer.id}/export-statement/?month=${encodeURIComponent(exportMonth)}`, {
+      const endpoint = {zip: "export-statement", pdf: "statement-pdf", excel: "statement-excel"}[output];
+      const response = await fetch(`${API_URL}/customers/${customer.id}/${endpoint}/?month=${encodeURIComponent(exportMonth)}`, {
+        cache: "no-store",
         headers: { Authorization: `Bearer ${token}` },
       });
       if (!response.ok) {
         const body = await response.json().catch(() => ({}));
-        throw new Error(body.detail || `Export failed (${response.status})`);
+        throw new Error(body.detail || `Statement ${output} failed (HTTP ${response.status}). Check the backend deployment and endpoint ${endpoint}.`);
       }
       const blob = await response.blob();
+      const signature = await blob.slice(0, 5).text();
+      if (output === "excel") {
+        // XLSX is a ZIP container, but a normal report ZIP is not an Excel workbook.
+        const bytes = await blob.arrayBuffer();
+        const archiveText = new TextDecoder().decode(bytes);
+        if (!signature.startsWith("PK") || !archiveText.includes("xl/workbook.xml") || !archiveText.includes("[Content_Types].xml")) {
+          throw new Error("The server did not return an Excel workbook. Deploy the updated backend statement files first.");
+        }
+      }
+      if (output === "pdf" && signature !== "%PDF-") {
+        throw new Error(`Expected PDF but received ${blob.type || "unknown content type"}. Check the backend statement-pdf endpoint.`);
+      }
+      if (output === "zip" && !signature.startsWith("PK")) {
+        throw new Error("The server did not return a ZIP archive.");
+      }
       const url = URL.createObjectURL(blob);
       const anchor = document.createElement("a");
       anchor.href = url;
-      anchor.download = `Customer_${customer.id}_Statement_${exportMonth}.zip`;
+      anchor.download = `Customer_${customer.id}_Statement_${exportMonth}.${output === "excel" ? "xlsx" : output === "pdf" ? "pdf" : "zip"}`;
       document.body.appendChild(anchor);
       anchor.click();
       anchor.remove();
-      URL.revokeObjectURL(url);
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
     } catch (err) {
       setExportError(err.message || "Could not export statement");
     } finally {
@@ -1521,23 +1556,9 @@ function AccountAnalytics({ kind, data, onRefresh, token }) {
         <StatCard label={balance >= 0 ? tr("Unpaid balance") : tr("Credit balance")} value={money(Math.abs(balance))} detail={tr("Charges minus payments")} icon={CreditCard}/>
         <StatCard label={isSupplier ? tr("Suppliers") : tr("Customers")} value={rows.length} detail={tr("Accounts")} icon={Users}/>
       </div>
-      <section className="panel" style={{ marginTop: 20 }}>
-        <div className="panel-heading">
-          <div><p className="eyebrow">{tr("PAYMENT STATUS")}</p><h2>Paid vs outstanding</h2></div>
-          <button className="refresh-button" type="button" onClick={() => setPaymentDisplay((v) => v === "bar" ? "pie" : "bar")}>Switch to {paymentDisplay === "bar" ? "pie" : "bar"} chart</button>
-        </div>
-        <div style={{ width: "100%", height: 280 }}>
-          <PaymentComparisonChart displayType={paymentDisplay} paid={paid} unpaid={Math.max(0, balance)} />
-        </div>
-        {balance < 0 && <p className="muted">Net account credit: {money(-balance)}. Credits are not included in the unpaid chart.</p>}
-      </section>
-      <DepartmentCostBars
-        records={costs}
-        title={isSupplier ? "Supplier invoice costs by department" : "Customer charges by department"}
-      />
       <section className="panel table-panel" style={{ marginTop: 20 }}>
         <div className="panel-heading">
-          <div><p className="eyebrow">ACCOUNT BALANCES</p><h2>Totals by {isSupplier ? "supplier" : "customer"}</h2></div>
+          <div><p className="eyebrow">ACCOUNT BALANCES</p><h2>{isSupplier ? "Totals by supplier" : tr("Customers")}</h2></div>
           <span className="record-count">{filteredAccounts.length} records</span>
         </div>
         {!isSupplier && (
@@ -1548,7 +1569,7 @@ function AccountAnalytics({ kind, data, onRefresh, token }) {
               type="month"
               value={exportMonth}
               max={today.slice(0, 7)}
-              onChange={(event) => setExportMonth(event.target.value)}
+              onChange={(event) => { setExportMonth(event.target.value); }}
               style={{ padding: "10px 14px", border: "1px solid #d9e2d9", borderRadius: 8 }}
             />
             <span className="muted">Select the month before exporting a customer statement.</span>
@@ -1559,12 +1580,18 @@ function AccountAnalytics({ kind, data, onRefresh, token }) {
           <input value={accountSearch} onChange={(e) => {setAccountSearch(e.target.value);setAccountPage(1);}} placeholder={`Search ${isSupplier ? "suppliers" : "customers"}...`} />
         </div>
         <div className="table-scroll"><table>
-          <thead><tr><th>{tr("Name")}</th><th>{tr("Charges")}</th><th>{tr("Paid")}</th><th>{tr("Unpaid / credit")}</th><th>{tr("Department breakdown")}</th>{!isSupplier && <th>{tr("Export data")}</th>}</tr></thead>
+          <thead><tr><th>{tr("Name")}</th><th>{tr("Charges")}</th><th>{tr("Paid")}</th><th>{tr("Unpaid / credit")}</th>{isSupplier && <th>{tr("Department breakdown")}</th>}{!isSupplier && <th style={{textAlign:"right"}}>{tr("Customer statement")}</th>}</tr></thead>
           <tbody>{visibleAccounts.map((r) => <tr key={r.id}>
-            <td>{r.name}</td><td>{money(r.charged)}</td><td>{money(r.paid)}</td>
+            <td>{r.name}</td>
+            <td>{money(r.charged)}</td><td>{money(r.paid)}</td>
             <td>{r.balance < 0 ? `${money(-r.balance)} credit` : money(r.balance)}</td>
-            <td>{[...r.departments.entries()].map(([d, amount]) => `${d}: ${money(amount)}`).join(" · ") || "—"}</td>
-            {!isSupplier && <td><button type="button" className="refresh-button" disabled={exportingId !== null} onClick={() => downloadCustomerStatement(r)} style={{whiteSpace:"nowrap"}}><Download size={15}/>{exportingId === r.id ? "Preparing…" : "Export ZIP"}</button></td>}
+            {isSupplier && <td>{[...r.departments.entries()].map(([d, amount]) => `${d}: ${money(amount)}`).join(" · ") || "—"}</td>}
+            {!isSupplier && <td><div style={{display:"flex",justifyContent:"flex-end",alignItems:"center",gap:6,whiteSpace:"nowrap"}}>
+              <button type="button" className="refresh-button" title={tr("Preview")} aria-label={`${tr("Preview")} — ${r.name}`} onClick={() => previewCustomerStatement(r)} style={{padding:"5px 8px",fontSize:11,gap:4,whiteSpace:"nowrap"}}><FileText size={12}/> {tr("Preview")}</button>
+              <button type="button" className="refresh-button" title={tr("Download ZIP")} aria-label={`${tr("Download ZIP")} — ${r.name}`} disabled={exportingId !== null} onClick={() => downloadCustomerStatement(r, "zip")} style={{padding:"5px 8px",fontSize:11,gap:4,whiteSpace:"nowrap"}}><Download size={12}/> ZIP</button>
+              <button type="button" className="refresh-button" title={tr("Download PDF")} aria-label={`${tr("Download PDF")} — ${r.name}`} disabled={exportingId !== null} onClick={() => downloadCustomerStatement(r, "pdf")} style={{padding:"5px 8px",fontSize:11,gap:4,whiteSpace:"nowrap"}}><FileText size={12}/> PDF</button>
+              <button type="button" className="refresh-button" title={tr("Download Excel")} aria-label={`${tr("Download Excel")} — ${r.name}`} disabled={exportingId !== null} onClick={() => downloadCustomerStatement(r, "excel")} style={{padding:"5px 8px",fontSize:11,gap:4,whiteSpace:"nowrap"}}><FileText size={12}/> Excel</button>
+            </div></td>}
           </tr>)}</tbody>
         </table></div>
         {exportError && <p role="alert" style={{color:"#b42318",marginTop:12}}>{exportError}</p>}
@@ -1572,6 +1599,17 @@ function AccountAnalytics({ kind, data, onRefresh, token }) {
         <PaginationControls page={safeAccountPage} totalPages={accountPages} totalItems={filteredAccounts.length} onPageChange={setAccountPage}/>
         <p className="muted" style={{ marginTop: 12 }}>Payments are recorded against the entire account, not individual invoices or departments. Department-level paid/unpaid amounts cannot be determined. {!isSupplier && "Customer programs without start dates are excluded from historical totals. "}Negative balances are credits.</p>
       </section>
+      <section className="panel" style={{ marginTop: 20 }}>
+        <div className="panel-heading">
+          <div><p className="eyebrow">{tr("PAYMENT STATUS")}</p><h2>Paid vs outstanding</h2></div>
+          <button className="refresh-button" type="button" onClick={() => setPaymentDisplay((v) => v === "bar" ? "pie" : "bar")}>Switch to {paymentDisplay === "bar" ? "pie" : "bar"} chart</button>
+        </div>
+        <div style={{ width: "100%", height: 280 }}>
+          <PaymentComparisonChart displayType={paymentDisplay} paid={paid} unpaid={Math.max(0, balance)} />
+        </div>
+        {balance < 0 && <p className="muted">Net account credit: {money(-balance)}. Credits are not included in the unpaid chart.</p>}
+      </section>
+      {isSupplier && <DepartmentCostBars records={costs} title="Supplier invoice costs by department"/>}
       <section className="panel" style={{ marginTop: 22 }}>
         <div className="panel-heading">
           <div>
@@ -1604,6 +1642,7 @@ function AccountAnalytics({ kind, data, onRefresh, token }) {
         {!visibleCharts.length && <div className="empty-state">No matching charts.</div>}
         <PaginationControls page={safeChartPage} totalPages={chartPages} totalItems={filteredCharts.length} onPageChange={setChartPage}/>
       </section>
+      {!isSupplier && <DepartmentCostBars records={costs} title="Customer charges by department"/>}
     </>
   );
 }
@@ -3752,6 +3791,8 @@ export default function App() {
                   setRecentWorkPage(1);
                 }}
                 headerActions={(
+                  <>
+                  <AddRecord page="workEntries" />
                   <button
                     type="button"
                     className="refresh-button"
@@ -3766,6 +3807,7 @@ export default function App() {
                   >
                     Sort: {recentWorkSort === "created_at" ? "Created time" : "Work date"}
                   </button>
+                  </>
                 )}
                 columns={[
                   { label: "Date", render: (r) => dateLabel(r.work_date) },
@@ -3845,7 +3887,7 @@ export default function App() {
                         {paginatedVillaTable.map((villa) => (
                           <tr key={villa.id}>
                             <td>{villa.villa}</td>
-                            <td>{villa.area ? `${villa.area} m²` : "—"}</td>
+                            <td>{villa.area ? villa.area : "—"}</td>
                             <td>{money(villa.income)}</td>
                             <td>{money(villa.netResult)}</td>
                           </tr>

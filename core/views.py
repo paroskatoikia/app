@@ -62,9 +62,30 @@ class CustomerViewSet(BaseModelViewSet):
         month = request.query_params.get("month")
 
         try:
-            return export_customer_statement(customer, month=month)
+            output_format = request.query_params.get("output", "zip")
+            if output_format not in ("zip", "pdf", "excel"):
+                raise APIValidationError("Output must be zip, pdf or excel.")
+            return export_customer_statement(customer, month=month, output_format=output_format)
         except ValidationError as exc:
             raise APIValidationError(exc.messages)
+
+
+    def _download_statement_format(self, request, output_format):
+        from django.core.exceptions import ValidationError
+        from rest_framework.exceptions import ValidationError as APIValidationError
+        from .customer_statement_export import export_customer_statement
+        try:
+            return export_customer_statement(self.get_object(), month=request.query_params.get("month"), output_format=output_format)
+        except ValidationError as exc:
+            raise APIValidationError(exc.messages)
+
+    @action(detail=True, methods=["get"], url_path="statement-pdf")
+    def statement_pdf(self, request, pk=None):
+        return self._download_statement_format(request, "pdf")
+
+    @action(detail=True, methods=["get"], url_path="statement-excel")
+    def statement_excel(self, request, pk=None):
+        return self._download_statement_format(request, "excel")
 
 
 class HouseViewSet(BaseModelViewSet):
@@ -583,6 +604,3 @@ class CompanyGasViewSet(viewsets.ReadOnlyModelViewSet):
                 queryset = queryset.filter(date__month=int(month))
 
         return queryset
-
-
-
