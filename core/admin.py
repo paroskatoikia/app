@@ -585,6 +585,7 @@ class VillaAdmin(nested_admin.NestedModelAdmin):
         "customer",
         "area",
         "is_company_property",
+        "monthly_program_revenue",
     )
 
     list_filter = ("area", "is_company_property")
@@ -619,6 +620,27 @@ class VillaAdmin(nested_admin.NestedModelAdmin):
             },
         ),
     )
+
+    @admin.display(description="Monthly Program Revenue (€)")
+    def monthly_program_revenue(self, obj):
+        period = timezone.localdate().replace(day=1)
+        return f"€{get_monthly_program_revenue(obj, period):,.2f}"
+
+    def changelist_view(self, request, extra_context=None):
+        response = super().changelist_view(request, extra_context=extra_context)
+        context = getattr(response, "context_data", None)
+        if context and "cl" in context:
+            period = timezone.localdate().replace(day=1)
+            total = sum(
+                (get_monthly_program_revenue(villa, period)
+                 for villa in context["cl"].queryset.iterator()),
+                Decimal("0.00"),
+            )
+            context["title"] = (
+                f'{context["title"]} — Monthly Program Revenue '
+                f'({period:%B %Y}): €{total:,.2f}'
+            )
+        return response
 
     @admin.action(
         description="Recalculate villa financial summaries"
