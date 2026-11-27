@@ -1573,6 +1573,14 @@ class WorkEntryMonthFilter(admin.SimpleListFilter):
 @admin.register(GroupedWorkEntry)
 class GroupedWorkEntryAdmin(WorkEntryAdmin):
 
+    def changelist_view(self, request, extra_context=None):
+        if request.method == "POST":
+            from .signals import batch_financial_refresh
+            with batch_financial_refresh():
+                return super().changelist_view(request, extra_context)
+        return super().changelist_view(request, extra_context)
+
+
     change_list_template = "admin/change_list.html"
 
     formfield_overrides = {
@@ -1704,4 +1712,3 @@ class GroupedWorkEntryAdmin(WorkEntryAdmin):
         WorkEntry.objects.filter(
             pk__in=queryset.values_list("pk", flat=True)
         ).delete()
-

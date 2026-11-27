@@ -159,8 +159,10 @@ def monthly_employee_expenses(year, month):
     return allocations
 
 
-def allocated_employee_expenses(year, month, house=None, department=None):
-    values = [v for (h, d), v in monthly_employee_expenses(year, month).items()
+def allocated_employee_expenses(year, month, house=None, department=None, allocations=None):
+    if allocations is None:
+        allocations = monthly_employee_expenses(year, month)
+    values = [v for (h, d), v in allocations.items()
               if (house is None or h == house.pk) and (department is None or d == department.pk)]
     return tuple(money(sum((v[i] for v in values), ZERO)) for i in range(2))
 
@@ -182,7 +184,7 @@ def get_company_monthly_costs(year, month):
     return {"employee_cost": wages, "ika_cost": ika, "gas_cost": gas, "company_invoice_cost": invoices, "other_department_cost": other, "total_cost": money(wages + ika + gas + invoices + other)}
 
 
-def refresh_villa_month(house, year, month):
+def refresh_villa_month(house, year, month, *, allocations=None):
     period_start, period_end = get_month_dates(
         year,
         month,
@@ -209,7 +211,7 @@ def refresh_villa_month(house, year, month):
     employee_cost = money(work["employee_cost"])
     invoice_expenses = money(invoices["expenses"])
 
-    ika_cost, gas_cost = allocated_employee_expenses(year, month, house=house)
+    ika_cost, gas_cost = allocated_employee_expenses(year, month, house=house, allocations=allocations)
     company_invoice_cost = ZERO  # Company invoices have no villa.
 
     program_revenue = get_monthly_program_revenue(
@@ -257,10 +259,13 @@ def refresh_villa_month(house, year, month):
 # VILLA YEARLY SUMMARY
 # --------------------------------------------------
 
-def refresh_villa_year(house, year):
+def refresh_villa_year(house, year, *, rebuild=True):
     # Refresh every month first, so the yearly figures
     # are calculated from the latest monthly data.
+    existing = set(VillaFinancialSummary.objects.filter(house=house, period_type="monthly", period_start__year=year).values_list("period_start__month", flat=True))
     for month in range(1, 13):
+        if not rebuild and month in existing:
+            continue
         refresh_villa_month(
             house,
             year,
@@ -372,6 +377,7 @@ def refresh_department_month(
     year,
     month,
     house=None,
+    *, allocations=None,
 ):
     period_start, period_end = get_month_dates(
         year,
@@ -413,7 +419,7 @@ def refresh_department_month(
     # Customer invoices are reimbursements; only company invoices
     # contribute to operating costs.
     total_revenue = work_revenue
-    ika_cost, gas_cost = allocated_employee_expenses(year, month, house=house, department=department)
+    ika_cost, gas_cost = allocated_employee_expenses(year, month, house=house, department=department, allocations=allocations)
     company_invoice_cost = money(company_invoice_queryset(invoice_queryset).aggregate(v=Sum("amount"))["v"])
     total_cost = employee_cost + ika_cost + gas_cost + company_invoice_cost
     gross_margin = money(total_revenue - total_cost)
@@ -447,9 +453,12 @@ def refresh_department_year(
     department,
     year,
     house=None,
+    *, rebuild=True,
 ):
+    existing = set(DepartmentFinancialSummary.objects.filter(department=department, house=house, period_type="monthly", period_start__year=year).values_list("period_start__month", flat=True))
     for month in range(1, 13):
-        refresh_department_month(department, year, month, house=house)
+        if rebuild or month not in existing:
+            refresh_department_month(department, year, month, house=house)
     monthly_records = DepartmentFinancialSummary.objects.filter(
         department=department,
         house=house,
@@ -683,4 +692,3 @@ def ika_accrued_cost(record, today=None):
     end = min(today, record.end_date or today)
     months = max(0, (end.year-record.start_date.year)*12 + end.month-record.start_date.month + 1)
     return money(record.monthly_cost * months)
-

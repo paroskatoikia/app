@@ -1,4 +1,8 @@
 from decimal import Decimal
+from contextlib import contextmanager
+from contextvars import ContextVar
+from datetime import date
+from django.db import transaction
 
 from django.db.models.signals import pre_save, post_save, post_delete
 from django.dispatch import receiver
@@ -12,9 +16,11 @@ from .models import (
     WorkEntry,
     Invoice,
     VillaProgram,
+    VillaFinancialSummary, DepartmentFinancialSummary,
 )
 
 from .services import (
+    monthly_employee_expenses, get_month_dates,
     refresh_villa_month,
     refresh_villa_year,
     rebuild_villa_financial_summaries,
@@ -45,7 +51,7 @@ def refresh_period(house_id, department_id, work_date):
 
         if house:
             refresh_villa_month(house, work_date.year, work_date.month)
-            refresh_villa_year(house, work_date.year)
+            refresh_villa_year(house, work_date.year, rebuild=False)
 
     if department_id:
         department = Department.objects.filter(pk=department_id).first()
@@ -62,7 +68,7 @@ def refresh_period(house_id, department_id, work_date):
             refresh_department_year(
                 department,
                 work_date.year,
-                house=None,
+                house=None, rebuild=False,
             )
 
             # Department summary for this specific villa.
@@ -77,7 +83,7 @@ def refresh_period(house_id, department_id, work_date):
                 refresh_department_year(
                     department,
                     work_date.year,
-                    house=house,
+                    house=house, rebuild=False,
                 )
 
 
@@ -135,10 +141,10 @@ def update_work_entry_finances(sender, instance, created, **kwargs):
         return
     # Work hours affect the allocation of IKA and fuel across all villas.
     old = getattr(instance, "_old_financial_values", None)
-    dates = {instance.work_date.year: instance.work_date}
+    dates = {instance.work_date.replace(day=1)}
     if old:
-        dates[old["work_date"].year] = old["work_date"]
-    for affected_date in dates.values():
+        dates.add(old["work_date"].replace(day=1))
+    for affected_date in dates:
         refresh_company_gas_period(affected_date)
 
 
@@ -356,20 +362,61 @@ def update_employee_rate_finances(sender, instance, created, **kwargs):
 from .models import Company_Gas
 
 
+_pending_months = ContextVar("financial_pending_months", default=None)
+
+@contextmanager
+def batch_financial_refresh():
+    if _pending_months.get() is not None:
+        yield
+        return
+    pending = set()
+    token = _pending_months.set(pending)
+    try:
+        with transaction.atomic():
+            yield
+            for period in sorted(pending):
+                _refresh_month(period)
+    finally:
+        _pending_months.reset(token)
+
+
 def refresh_company_gas_period(expense_date):
     if not expense_date:
         return
+    period = expense_date.replace(day=1)
+    pending = _pending_months.get()
+    if pending is not None:
+        pending.add(period)
+    else:
+        with transaction.atomic():
+            _refresh_month(period)
 
-    year = expense_date.year
-    houses = list(House.objects.all())
-    departments = list(Department.objects.all())
-    # Year refresh functions already rebuild all twelve monthly summaries.
-    for house in houses:
-        refresh_villa_year(house, year)
-    for department in departments:
-        refresh_department_year(department, year, house=None)
-        for house in houses:
-            refresh_department_year(department, year, house=house)
+
+def _refresh_month(period):
+    year, month = period.year, period.month
+    start, end = get_month_dates(year, month)
+    allocations = monthly_employee_expenses(year, month)
+    # Include previous summary keys so moved/deleted records clear old totals.
+    work = WorkEntry.objects.filter(work_date__range=(start, end))
+    invoices = Invoice.objects.filter(invoice_date__range=(start, end))
+    pairs = set(work.values_list("house_id", "service__department_id"))
+    pairs.update(invoices.values_list("house_id", "department_id"))
+    pairs.update(allocations)
+    pairs.update(DepartmentFinancialSummary.objects.filter(period_type="monthly", period_start=start).values_list("house_id", "department_id"))
+    house_ids = {h for h, d in pairs if h is not None}
+    house_ids.update(VillaFinancialSummary.objects.filter(period_type="monthly", period_start=start).values_list("house_id", flat=True))
+    pairs.update((None, d) for h, d in list(pairs) if d is not None)
+    houses = House.objects.in_bulk(house_ids)
+    departments = Department.objects.in_bulk({d for h, d in pairs if d is not None})
+    for house in houses.values():
+        refresh_villa_month(house, year, month, allocations=allocations)
+        refresh_villa_year(house, year, rebuild=False)
+    for h, d in sorted(pairs, key=lambda pair: (pair[1] or 0, pair[0] or 0)):
+        if d not in departments or (h is not None and h not in houses):
+            continue
+        house = houses.get(h)
+        refresh_department_month(departments[d], year, month, house=house, allocations=allocations)
+        refresh_department_year(departments[d], year, house=house, rebuild=False)
 
 
 @receiver(pre_save, sender=Company_Gas)
@@ -440,10 +487,13 @@ def refresh_ika_finances(sender, instance, **kwargs):
     old = getattr(instance, "_old_ika_period", None)
     if old:
         periods.append((old["start_date"], old["end_date"]))
-    years = set()
+    months = set()
     for start, end in periods:
         end = min(end or today, today)
-        if start <= end:
-            years.update(range(start.year, end.year + 1))
-    for year in sorted(years):
-        refresh_company_gas_period(today.replace(year=year, month=1, day=1))
+        current = start.replace(day=1)
+        while current <= end:
+            months.add(current)
+            current = date(current.year + (current.month == 12), current.month % 12 + 1, 1)
+    with batch_financial_refresh():
+        for period in sorted(months):
+            refresh_company_gas_period(period)
