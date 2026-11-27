@@ -1,4 +1,8 @@
 from django.shortcuts import render
+from django.db import transaction
+from django.core.exceptions import ValidationError as ModelValidationError
+from django.db.models.deletion import ProtectedError
+from rest_framework.exceptions import ValidationError as APIValidationError
 
 # Create your views here.
 from rest_framework import viewsets
@@ -39,6 +43,26 @@ from .serializers import (
 
 class BaseModelViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
+
+    def perform_create(self, serializer):
+        try:
+            with transaction.atomic():
+                serializer.save()
+        except ModelValidationError as exc:
+            raise APIValidationError(getattr(exc, "message_dict", exc.messages))
+
+    def perform_update(self, serializer):
+        try:
+            with transaction.atomic():
+                serializer.save()
+        except ModelValidationError as exc:
+            raise APIValidationError(getattr(exc, "message_dict", exc.messages))
+
+    def perform_destroy(self, instance):
+        try:
+            instance.delete()
+        except ProtectedError:
+            raise APIValidationError("This record is linked to other records and cannot be deleted.")
 
 
 class CustomerViewSet(BaseModelViewSet):
@@ -92,7 +116,7 @@ class HouseViewSet(BaseModelViewSet):
     queryset = House.objects.select_related("customer").all()
     serializer_class = HouseSerializer
     search_fields = ["name", "area", "customer__name"]
-    filterset_fields = ["customer"]
+    filterset_fields = ["customer", "is_company_property"]
     ordering_fields = ["name", "created_at"]
 
 
@@ -152,7 +176,9 @@ class WorkEntryViewSet(BaseModelViewSet):
     serializer_class = WorkEntrySerializer
 
     filterset_fields = [
+        "ownership",
         "house",
+        "house__customer",
         "employee",
         "service",
         "service__department",
@@ -216,34 +242,41 @@ class SupplierViewSet(viewsets.ReadOnlyModelViewSet):
 class SupplierPaymentViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = (
         SupplierPayment.objects
-        .select_related("supplier")
+        .select_related("supplier", "invoice")
         .all()
         .order_by("-payment_date", "-id")
     )
     serializer_class = SupplierPaymentSerializer
     permission_classes = [IsAuthenticated]
+    filterset_fields = {"supplier": ["exact"], "invoice": ["exact", "isnull"], "payment_date": ["exact"]}
+    search_fields = ["supplier__name", "invoice__invoice_number", "reference", "notes"]
+    ordering_fields = ["payment_date", "amount"]
 
 
 class CustomerPaymentViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = (
         CustomerPayment.objects
-        .select_related("customer")
+        .select_related("customer", "invoice")
         .all()
         .order_by("-payment_date", "-id")
     )
     serializer_class = CustomerPaymentSerializer
     permission_classes = [IsAuthenticated]
+    filterset_fields = {"customer": ["exact"], "invoice": ["exact", "isnull"], "payment_date": ["exact"]}
+    search_fields = ["customer__name", "invoice__invoice_number", "reference", "notes"]
+    ordering_fields = ["payment_date", "amount"]
 
 
 
 class InvoiceViewSet(BaseModelViewSet):
     queryset = Invoice.objects.select_related(
         "department",
-        "house",
+        "house__customer",
+        "supplier",
     ).all()
     serializer_class = InvoiceSerializer
-    filterset_fields = ["department", "house", "invoice_date"]
-    search_fields = ["supplier", "invoice_number", "description"]
+    filterset_fields = ["ownership", "department", "house", "house__customer", "supplier", "invoice_date"]
+    search_fields = ["supplier__name", "invoice_number", "description", "house__name", "house__customer__name"]
     ordering_fields = ["invoice_date", "amount", "supplier"]
 
 
@@ -315,7 +348,7 @@ class WeeklyChecksView(APIView):
         deadline = now - timedelta(days=7)
         due_soon_cutoff = now - timedelta(days=5)
 
-        houses = House.objects.select_related("customer").all()
+        houses = House.objects.select_related("customer").filter(is_company_property=False, customer__isnull=False)
 
         municipal_dates = dict(
             HouseWaterReading.objects.values("house_id")
@@ -604,3 +637,14 @@ class CompanyGasViewSet(viewsets.ReadOnlyModelViewSet):
                 queryset = queryset.filter(date__month=int(month))
 
         return queryset
+
+
+from .models import IKA
+from .serializers import IKASerializer
+from rest_framework.permissions import IsAdminUser
+
+class IKAViewSet(viewsets.ReadOnlyModelViewSet):
+    permission_classes = [IsAdminUser]
+    queryset = IKA.objects.all()
+    serializer_class = IKASerializer
+

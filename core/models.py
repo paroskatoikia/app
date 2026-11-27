@@ -12,6 +12,20 @@ from decimal import Decimal
 from django.core.files.storage import default_storage
 
 
+class Ownership(models.TextChoices):
+    COMPANY = "company", "Company"
+    CUSTOMER = "customer", "Customer"
+
+
+def validate_ownership(record):
+    if record.ownership == Ownership.COMPANY:
+        if record.house_id:
+            raise ValidationError({"house": "Company records must not have a villa."})
+    elif record.ownership == Ownership.CUSTOMER:
+        if not record.house_id or not record.house.customer_id or record.house.is_company_property:
+            raise ValidationError({"house": "Select a customer villa."})
+
+
 MONEY_VALIDATORS = [MinValueValidator(Decimal("0.00"))]
 
 
@@ -708,7 +722,18 @@ class Employee(models.Model):
         return hours * hourly_cost
 
 
+class IKAPackage(models.Model):
+    name = models.CharField(max_length=150, unique=True)
+    monthly_cost = models.DecimalField(max_digits=12, decimal_places=2, validators=MONEY_VALIDATORS)
+    is_active = models.BooleanField(default=True)
+
+    def __str__(self):
+        return f"{self.name} — €{self.monthly_cost}/month"
+
+
 class IKA(models.Model):
+    package = models.ForeignKey(IKAPackage, on_delete=models.PROTECT, null=True, blank=True)
+    package_name = models.CharField(max_length=150, blank=True, default="")
     employee = models.ForeignKey(Employee, on_delete=models.PROTECT, related_name="ika_records")
     insurance_hours = models.PositiveSmallIntegerField(choices=[(4, "4 hours"), (8, "8 hours")], default=4)
     monthly_cost = models.DecimalField(max_digits=12, decimal_places=2, validators=MONEY_VALIDATORS, help_text="Employer contribution only; exclude amounts already counted in wages.")
@@ -769,8 +794,10 @@ class WorkEntry(models.Model):
         Employee, on_delete=models.PROTECT, related_name="work_entries"
     )
 
+    ownership = models.CharField(max_length=10, choices=Ownership.choices, db_index=True, default=Ownership.CUSTOMER)
+
     house = models.ForeignKey(
-        House, on_delete=models.PROTECT, related_name="work_entries"
+        House, on_delete=models.PROTECT, related_name="work_entries", null=True, blank=True
     )
 
     service = models.ForeignKey(
@@ -843,8 +870,16 @@ class WorkEntry(models.Model):
 
     class Meta:
         ordering = ["-work_date"]
+        constraints = [models.CheckConstraint(condition=(models.Q(ownership="company", house__isnull=True) | models.Q(ownership="customer", house__isnull=False)), name="work_entry_ownership_house")]
+
+    def clean(self):
+        super().clean()
+        validate_ownership(self)
+        if self.ownership == Ownership.COMPANY and self.additional_charges:
+            raise ValidationError({"additional_charges": "Record internal purchases as company expenses."})
 
     def save(self, *args, **kwargs):
+        self.clean()
         is_new = self._state.adding
 
         if is_new:
@@ -889,6 +924,9 @@ class WorkEntry(models.Model):
             * (self.customer_hourly_rate_snapshot or Decimal("0.00"))
         )
 
+        if self.ownership == Ownership.COMPANY:
+            self.customer_hourly_rate_snapshot = Decimal("0.00")
+            self.customer_charge = Decimal("0.00")
         super().save(*args, **kwargs)
 
     @property
@@ -951,14 +989,16 @@ class Invoice(models.Model):
         related_name="invoices",
     )
 
+    ownership = models.CharField(max_length=10, choices=Ownership.choices, db_index=True, default=Ownership.CUSTOMER)
+
     house = models.ForeignKey(
         House,
-        on_delete=models.SET_NULL,
+        on_delete=models.PROTECT,
         null=True,
         blank=True,
         related_name="invoices",
         help_text=(
-            "Leave blank if the invoice is a general department/company cost."
+            "Required for customer invoices; leave blank for company invoices."
         ),
     )
 
@@ -966,7 +1006,6 @@ class Invoice(models.Model):
         Supplier,
         on_delete=models.PROTECT,
         related_name="invoices",
-        default=1,
     )
 
     invoice_number = models.CharField(max_length=100)
@@ -991,6 +1030,7 @@ class Invoice(models.Model):
         ordering = ["-invoice_date"]
 
         constraints = [
+            models.CheckConstraint(condition=(models.Q(ownership="company", house__isnull=True) | models.Q(ownership="customer", house__isnull=False)), name="invoice_ownership_house"),
             models.UniqueConstraint(
                 fields=["supplier", "invoice_number"],
                 name="unique_supplier_invoice_number",
@@ -1001,7 +1041,18 @@ class Invoice(models.Model):
         number = self.invoice_number or "No invoice number"
         return f"{self.supplier} - {number} - {self.amount}"
 
+    def clean(self):
+        super().clean()
+        validate_ownership(self)
+        if self.pk:
+            if self.company_payments.exclude(supplier_id=self.supplier_id).exists() or (self.ownership != Ownership.COMPANY and self.company_payments.exists()):
+                raise ValidationError("Invoice ownership or supplier conflicts with existing payments.")
+            if self.customer_payments.exists() and (self.ownership != Ownership.CUSTOMER or not self.house_id or self.customer_payments.exclude(customer_id=self.house.customer_id).exists()):
+                raise ValidationError("Invoice ownership or customer conflicts with existing payments.")
+
     def get_customer_name(self):
+        if self.ownership == Ownership.COMPANY:
+            return "COMPANY"
         if self.house_id and self.house.customer_id:
             return self.house.customer.name
 
@@ -1033,6 +1084,7 @@ class Invoice(models.Model):
         return f"invoices/{customer_name}/{filename}"
 
     def save(self, *args, **kwargs):
+        self.clean()
         new_attachment = (
             self.attachment
             and not self.attachment._committed
@@ -1372,11 +1424,14 @@ class SupplierPayment(models.Model):
         related_name="payments"
     )
 
+    invoice = models.ForeignKey(Invoice, on_delete=models.PROTECT, null=True, blank=True, related_name="company_payments")
+
     payment_date = models.DateField()
 
     amount = models.DecimalField(
         max_digits=12,
-        decimal_places=2
+        decimal_places=2,
+        validators=[MinValueValidator(Decimal("0.01"))]
     )
 
     reference = models.CharField(
@@ -1385,6 +1440,19 @@ class SupplierPayment(models.Model):
     )
 
     notes = models.TextField(blank=True)
+
+    def clean(self):
+        super().clean()
+        if self.invoice_id and (self.invoice.ownership != Ownership.COMPANY or self.invoice.supplier_id != self.supplier_id):
+            raise ValidationError({"invoice": "Select a company invoice belonging to this supplier."})
+        if self.invoice_id:
+            self.reference = self.invoice.invoice_number
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        if kwargs.get("update_fields") is not None:
+            kwargs["update_fields"] = set(kwargs["update_fields"]) | {"reference"}
+        return super().save(*args, **kwargs)
 
     class Meta:
         ordering = ["-payment_date", "-id"]
@@ -1402,6 +1470,8 @@ class CustomerPayment(models.Model):
         related_name="payments",
     )
 
+    invoice = models.ForeignKey(Invoice, on_delete=models.PROTECT, null=True, blank=True, related_name="customer_payments")
+
     payment_date = models.DateField()
 
     amount = models.DecimalField(
@@ -1415,9 +1485,30 @@ class CustomerPayment(models.Model):
     reference = models.CharField(
         max_length=160,
         blank=True,
+        help_text="Invoice number, or blank for a general payment.",
     )
 
+    receipt = models.FileField(
+        upload_to="customer_receipts/%Y/%m/",
+        blank=True,
+        null=True,
+        validators=[FileExtensionValidator(allowed_extensions=["pdf", "jpg", "jpeg", "png", "webp", "gif", "bmp", "tif", "tiff", "heic", "heif"])],
+        help_text="Upload a PDF or image of the payment receipt.",
+    )
     notes = models.TextField(blank=True)
+
+    def clean(self):
+        super().clean()
+        if self.invoice_id and (self.invoice.ownership != Ownership.CUSTOMER or not self.invoice.house_id or self.invoice.house.customer_id != self.customer_id):
+            raise ValidationError({"invoice": "Select an invoice belonging to this customer."})
+        if self.invoice_id:
+            self.reference = self.invoice.invoice_number
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        if kwargs.get("update_fields") is not None:
+            kwargs["update_fields"] = set(kwargs["update_fields"]) | {"reference"}
+        return super().save(*args, **kwargs)
 
     class Meta:
         ordering = ["-payment_date", "-id"]

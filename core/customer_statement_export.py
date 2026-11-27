@@ -231,7 +231,8 @@ def _build_pdf(customer, villas, works, invoices, programs, payments, today):
     additional_total = sum((D(w.additional_charges) for w in works), Decimal('0'))
     invoice_total = sum((D(i.amount) for i in invoices), Decimal('0'))
     program_total = sum((D(p.price) * _month_count(p, today) for p in programs), Decimal('0'))
-    paid = sum((D(p.amount) for p in payments), Decimal('0'))
+    invoice_ids = {i.pk for i in invoices}
+    paid = sum((D(p.amount) for p in payments if p.invoice_id in invoice_ids or (not p.invoice_id and not (p.reference or '').strip())), Decimal('0'))
     charges = work_total + additional_total + invoice_total + program_total
     balance = charges - paid
     counts = len(works)
@@ -246,7 +247,7 @@ def _build_pdf(customer, villas, works, invoices, programs, payments, today):
         f'This statement covers <b>{len(villas)} villa(s)</b> and <b>{counts} recorded work entries</b>. '
         f'Work services contributed <b>{EURO(work_total)}</b>; additional charges <b>{EURO(additional_total)}</b>; villa-linked supplier invoices '
         f'contributed <b>{EURO(invoice_total)}</b>; and dated monthly villa programs '
-        f'contributed <b>{EURO(program_total)}</b>. Payments received total <b>{EURO(paid)}</b>. '
+        f'contributed <b>{EURO(program_total)}</b>. Allocated payments total <b>{EURO(paid)}</b>. '
         + (f'The remaining balance is <b>{EURO(balance)}</b>.' if balance >= 0 else f'The account has a credit of <b>{EURO(-balance)}</b>.'), body))
 
     dept_totals = defaultdict(Decimal)
@@ -308,11 +309,11 @@ def _build_pdf(customer, villas, works, invoices, programs, payments, today):
                          invoice_rows, [70, 83, 100, 78, 85, 65]))
 
     story.append(Paragraph('PAYMENT HISTORY', h2))
-    pay_rows = [(p.payment_date.isoformat(), p.reference or '—', p.notes or '—', EURO(p.amount)) for p in payments]
+    pay_rows = [(p.payment_date.isoformat(), (p.invoice.invoice_number if p.invoice_id else ('Unallocated: ' + p.reference if p.reference else 'Services')), p.notes or '—', EURO(p.amount)) for p in payments]
     story.append(tabular(['Date', 'Reference', 'Notes', 'Amount'], pay_rows, [84, 112, 190, 95]))
     story.extend([Spacer(1, 18), Paragraph('NOTES ON THIS STATEMENT', h2),
                   Paragraph('Balances are calculated as recorded work charges + additional charges + villa-linked supplier invoices + dated monthly villa programs - customer payments. '
-                            'Payments are account-level and are not assigned to individual work entries or invoices. '
+                            'Invoice payments are linked to individual invoices; service payments are account-level. '
                             'Future-dated entries are excluded. The attached invoices are supporting source documents, not proof of payment. '
                             'This is a management statement, not a tax invoice.', muted)])
     doc.build(story)
@@ -321,7 +322,7 @@ def _build_pdf(customer, villas, works, invoices, programs, payments, today):
 
 
 def _build_monthly_pdf(customer, villas, works, invoices, programs, payments, today,
-               period_start=None, opening_balance=Decimal('0'), check_activities=None):
+               period_start=None, opening_balance=Decimal('0'), check_activities=None, split=None):
     """Monthly customer statement. Backward compatible with older overview exports."""
     regular, bold = _font_names()
     period_start = period_start or today.replace(day=1)
@@ -475,6 +476,14 @@ def _build_monthly_pdf(customer, villas, works, invoices, programs, payments, to
                              rows, [88, 126, 54, 130, 83], footer_count=5,
                              highlighted_rows=range(1, program_row_count + 1)))
 
+    if split:
+        story.append(Paragraph('SUPPLIER INVOICE REIMBURSEMENTS', h2))
+        story.append(tabular(['Invoice number', 'Date', 'Amount'], [(i.invoice_number, i.invoice_date.isoformat(), EURO(i.amount)) for i in invoices], [190, 130, 161]))
+        story.append(tabular(['Account', 'Opening', 'Charges', 'Payments', 'Closing'], split['rows'], [105,94,94,94,94]))
+        story.append(Paragraph('Unmatched referenced payments (not allocated): ' + EURO(split['unmatched']), body))
+        story.append(Paragraph('Total outstanding (before applying any separate credits): ' + EURO(split['outstanding']), body))
+        doc.build(story)
+        return buffer.getvalue()
     story.append(Paragraph('MONTHLY ACCOUNT SUMMARY', h2))
     cards = [
         [Paragraph('OPENING BALANCE', muted),
@@ -513,8 +522,8 @@ def _build_monthly_pdf(customer, villas, works, invoices, programs, payments, to
     story.append(Paragraph(
         'Opening balance is the net balance of all recorded charges and payments '
         'before this billing month; it is not a separately posted opening-balance '
-        'transaction. Payments are account-level and cannot be allocated to '
-        'specific invoices or work entries. Programs are charged in full for '
+        'transaction. Invoice payments use explicit invoice links; service payments are account-level. '
+        'Programs are charged in full for '
         'each overlapping month, without proration. Programs without a start '
         'date are excluded. VAT applies to monthly fees and services only; '
         'supplier invoices and additional charges are included at their recorded amounts without additional VAT. '
@@ -548,14 +557,14 @@ def export_customer_statement(customer, month=None, output_format="zip"):
     start, next_month = _period_bounds(month)
     # Never include future-dated transactions in an already selected month.
     cutoff = min(today, next_month - timedelta(days=1))
-    villas = list(House.objects.filter(customer=customer).order_by('name'))
+    villas = list(House.objects.filter(customer=customer, is_company_property=False).order_by('name'))
     villa_ids = [v.pk for v in villas]
 
     works = list(WorkEntry.objects.filter(
-        house_id__in=villa_ids, work_date__gte=start, work_date__lte=cutoff
+        ownership="customer", house_id__in=villa_ids, work_date__gte=start, work_date__lte=cutoff
     ).select_related('house', 'service__department').order_by('work_date', 'pk'))
     invoices = list(Invoice.objects.filter(
-        house_id__in=villa_ids, invoice_date__gte=start, invoice_date__lte=cutoff
+        ownership="customer", house_id__in=villa_ids, invoice_date__gte=start, invoice_date__lte=cutoff
     ).select_related('house', 'department', 'supplier').order_by('invoice_date', 'pk'))
     programs = list(VillaProgram.objects.filter(
         house_id__in=villa_ids
@@ -568,17 +577,31 @@ def export_customer_statement(customer, month=None, output_format="zip"):
 
     # Opening balance uses every historical charge/payment before this month.
     old_work = WorkEntry.objects.filter(
-        house_id__in=villa_ids, work_date__lt=start
+        ownership="customer", house_id__in=villa_ids, work_date__lt=start
     ).values_list('customer_charge', flat=True)
     old_additional = WorkEntry.objects.filter(
-        house_id__in=villa_ids, work_date__lt=start
+        ownership="customer", house_id__in=villa_ids, work_date__lt=start
     ).values_list('additional_charges', flat=True)
     old_invoices = Invoice.objects.filter(
-        house_id__in=villa_ids, invoice_date__lt=start
+        ownership="customer", house_id__in=villa_ids, invoice_date__lt=start
     ).values_list('amount', flat=True)
-    old_payments = CustomerPayment.objects.filter(
-        customer=customer, payment_date__lt=start
-    ).values_list('amount', flat=True)
+    old_payments = list(CustomerPayment.objects.filter(customer=customer, payment_date__lt=start))
+    eligible = set(Invoice.objects.filter(
+        ownership="customer", house_id__in=villa_ids, invoice_date__lte=cutoff
+    ).values_list('pk', flat=True))
+
+    def partition(records):
+        service = invoice = unmatched = D(0)
+        for payment in records:
+            if payment.invoice_id in eligible:
+                invoice += D(payment.amount)
+            elif payment.invoice_id or (payment.reference or '').strip():
+                unmatched += D(payment.amount)
+            else:
+                service += D(payment.amount)
+        return service, invoice, unmatched
+    old_service, old_invoice, old_unmatched = partition(old_payments)
+    service_paid, invoice_paid, unmatched = partition(payments)
     old_programs = Decimal('0')
     for program in programs:
         if program.start_date and program.start_date < start:
@@ -590,15 +613,22 @@ def export_customer_statement(customer, month=None, output_format="zip"):
     historical_invoice_total = sum((D(v) for v in old_invoices), Decimal('0'))
     opening_balance = (
         _vat_parts(historical_taxable_charges)[2]
-        + historical_invoice_total
         + sum((D(v) for v in old_additional), Decimal('0'))
-        - sum((D(v) for v in old_payments), Decimal('0'))
+        - old_service
     )
 
+    invoice_opening = historical_invoice_total - old_invoice
+    service_charges = _vat_parts(sum((D(w.customer_charge) for w in works), D(0)) + sum((D(p.price) for p in active_programs), D(0)))[2] + sum((D(w.additional_charges) for w in works), D(0))
+    invoice_charges = sum((D(i.amount) for i in invoices), D(0))
+    service_closing = opening_balance + service_charges - service_paid
+    invoice_closing = invoice_opening + invoice_charges - invoice_paid
+    raw_rows = [('Services', opening_balance, service_charges, service_paid, service_closing), ('Invoices', invoice_opening, invoice_charges, invoice_paid, invoice_closing)]
+    split = {'rows': [(r[0], *(EURO(v) for v in r[1:])) for r in raw_rows], 'raw_rows': raw_rows, 'unmatched': old_unmatched + unmatched, 'outstanding': max(D(0),service_closing)+max(D(0),invoice_closing)}
+    payments = [p for p in payments if not p.invoice_id and not (p.reference or '').strip()]
     check_activities = _customer_check_activity(villa_ids, start, cutoff)
     if output_format == 'excel':
         sheets = _statement_sheets(customer, start, opening_balance, works, invoices,
-                                   active_programs, payments, check_activities, villas=villas)
+                                   active_programs, payments, check_activities, villas=villas, split=split)
         response = HttpResponse(_statement_xlsx(sheets), content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
         response['Content-Disposition'] = f'attachment; filename="Customer_{customer.pk}_Statement_{month}.xlsx"'
         response['Cache-Control'] = 'private, no-store'
@@ -606,14 +636,14 @@ def export_customer_statement(customer, month=None, output_format="zip"):
     pdf = _build_monthly_pdf(customer, villas, works, invoices, active_programs,
                      payments, cutoff, period_start=start,
                       opening_balance=opening_balance,
-                      check_activities=check_activities)
+                      check_activities=check_activities, split=split)
     if output_format == 'pdf':
         response = HttpResponse(pdf, content_type='application/pdf')
         response['Content-Disposition'] = f'attachment; filename="Customer_{customer.pk}_Statement_{month}.pdf"'
         response['Cache-Control'] = 'private, no-store'
         return response
     sheets = _statement_sheets(customer, start, opening_balance, works, invoices,
-                               active_programs, payments, check_activities, villas=villas)
+                               active_programs, payments, check_activities, villas=villas, split=split)
     excel = _statement_xlsx(sheets)
     output = BytesIO()
     prefix = f'Customer_{customer.pk}_{_safe(customer.name)}_{month}'
@@ -641,7 +671,7 @@ def export_customer_statement(customer, month=None, output_format="zip"):
     return response
 
 
-def _statement_sheets(customer, start, opening, works, invoices, programs, payments, checks, villas=None):
+def _statement_sheets(customer, start, opening, works, invoices, programs, payments, checks, villas=None, split=None):
     work = sum((D(w.customer_charge) for w in works), D(0))
     extra = sum((D(w.additional_charges) for w in works), D(0))
     fees = sum((D(p.price) for p in programs), D(0))
@@ -660,9 +690,13 @@ def _statement_sheets(customer, start, opening, works, invoices, programs, payme
     if villas is not None and len(villas) <= 1:
         headers.pop(1)
         rows = [[r[0], *r[2:]] for r in rows]
-    return [{'name': 'Monthly work statement', 'headers': headers, 'rows': rows,
+    result = [{'name': 'Monthly work statement', 'headers': headers, 'rows': rows,
              'customer': customer.name, 'month': start.strftime('%B %Y'),
              'program_count': len(programs)}]
+    if split:
+        result.append({'name':'Invoice reimbursements','headers':['Invoice number','Date','Villa','Amount (EUR)','Details'], 'rows': [[i.invoice_number,i.invoice_date.isoformat(),i.house.name,amount(i.amount),str(i.description or '')] for i in invoices], 'customer':customer.name,'month':start.strftime('%B %Y'),'program_count':0})
+        result.append({'name':'Account balances','headers':['Account','Opening','Charges','Payments','Closing'], 'rows': [[r[0],*(amount(v) for v in r[1:])] for r in split['raw_rows']]+[['Unmatched payments','','','',amount(split['unmatched'])],['Total outstanding','','','',amount(split['outstanding'])]],'customer':customer.name,'month':start.strftime('%B %Y'),'program_count':0})
+    return result
 
 
 def _statement_xlsx(sheets):
@@ -717,3 +751,4 @@ def _statement_xlsx(sheets):
     output = BytesIO()
     wb.save(output)
     return output.getvalue()
+

@@ -1,4 +1,3 @@
-
 from collections import defaultdict
 from datetime import date
 from decimal import Decimal
@@ -24,7 +23,7 @@ from reportlab.platypus import (
 from .models import (
     Customer, House, Employee, Department, Supplier,
     WorkEntry, VillaProgram, Invoice,
-    CustomerPayment, SupplierPayment,
+    CustomerPayment, SupplierPayment, Ownership,
 )
 
 from .customer_statement_export import _build_pdf
@@ -413,7 +412,7 @@ def export_business_overview():
 
     customers = list(Customer.objects.all().order_by("name"))
     villas = list(
-        House.objects.select_related("customer").order_by("name")
+        House.objects.filter(is_company_property=False, customer__isnull=False).select_related("customer").order_by("name")
     )
     employees = list(
         Employee.objects.select_related("department").all()
@@ -444,19 +443,19 @@ def export_business_overview():
     programs = list(
         VillaProgram.objects.select_related(
             "house__customer"
-        ).all()
+        ).filter(house__is_company_property=False, house__customer__isnull=False)
     )
 
     customer_payments = list(
         CustomerPayment.objects.filter(
             payment_date__lte=today
-        ).select_related("customer")
+        ).select_related("customer", "invoice")
     )
 
     supplier_payments = list(
         SupplierPayment.objects.filter(
             payment_date__lte=today
-        ).select_related("supplier")
+        ).select_related("supplier", "invoice")
     )
 
     monthly = defaultdict(
@@ -492,10 +491,10 @@ def export_business_overview():
 
     for work in works:
         period = month_of(work.work_date)
-        revenue = amount(work.customer_charge)
+        revenue = amount(work.customer_charge) if work.ownership == Ownership.CUSTOMER else ZERO
         cost = amount(work.employee_cost)
 
-        customer_id = work.house.customer_id
+        customer_id = work.house.customer_id if work.ownership == Ownership.CUSTOMER and work.house_id else None
         villa_id = work.house_id
         employee_id = work.employee_id
 
@@ -533,19 +532,14 @@ def export_business_overview():
         value = amount(invoice.amount)
         period = month_of(invoice.invoice_date)
 
-        monthly[period]["supplier_invoices"] += value
-
-        if invoice.department_id:
-            department_data[invoice.department.name][
-                "invoices"
-            ] += value
-
-        supplier_data[invoice.supplier_id]["invoices"] += value
-        supplier_invoices[invoice.supplier_id].append(invoice)
-
-        if invoice.house_id:
+        if invoice.ownership == Ownership.COMPANY:
+            monthly[period]["supplier_invoices"] += value
+            if invoice.department_id:
+                department_data[invoice.department.name]["invoices"] += value
+            supplier_data[invoice.supplier_id]["invoices"] += value
+            supplier_invoices[invoice.supplier_id].append(invoice)
+        elif invoice.ownership == Ownership.CUSTOMER and invoice.house_id:
             customer_id = invoice.house.customer_id
-
             customer_data[customer_id]["invoices"] += value
             villa_data[invoice.house_id]["invoices"] += value
             customer_invoices[customer_id].append(invoice)
@@ -574,7 +568,15 @@ def export_business_overview():
             "customer_payments"
         ] += value
 
-        customer_data[payment.customer_id]["paid"] += value
+        info = customer_data[payment.customer_id]
+        if payment.invoice_id and payment.invoice.invoice_date <= today:
+            info["invoice_paid"] += value
+            info["paid"] += value
+        elif not payment.invoice_id and not (payment.reference or "").strip():
+            info["service_paid"] += value
+            info["paid"] += value
+        else:
+            info["unmatched"] += value
         customer_payment_records[payment.customer_id].append(payment)
 
     for payment in supplier_payments:
@@ -645,8 +647,8 @@ def export_business_overview():
             f"Gross margin percentage: "
             f"{fin['gross_margin_percent']:.1f}%. "
             f"Employee work costs: {money(fin['employee_cost'])}. "
-            f"Supplier invoice costs: {money(fin['invoice_cost'])}. "
-            f"Result after invoices: {money(fin['result'])}. "
+            f"Company invoice costs: {money(fin['invoice_cost'])}. "
+            f"Result after company invoices: {money(fin['result'])}. "
             f"Customer payments: {money(fin['customer_payments'])}. "
             f"Supplier payments: {money(fin['supplier_payments'])}."
         )
@@ -723,6 +725,7 @@ def export_business_overview():
             "and monthly villa-program revenue. Recorded gross margin "
             "subtracts employee work-entry costs. The result after "
             "invoices also subtracts supplier invoice expenses. "
+            "IKA, fuel and other department overhead are not included in this report result. "
             "These are management calculations, not audited profit."
         ),
         (
@@ -730,8 +733,8 @@ def export_business_overview():
             "Customer account balances additionally include "
             "villa-linked supplier invoices, matching the dashboard. "
             "These invoice amounts are not counted again as company "
-            "revenue. Payments are account-level and are not "
-            "allocated to specific invoices or departments."
+            "revenue or operating expenses. Invoice payments use direct invoice links; "
+            "unmatched customer references are excluded from allocated balances."
         ),
     ]
 
@@ -780,8 +783,8 @@ def export_business_overview():
             [
                 (
                     w.work_date,
-                    w.house.customer.name,
-                    w.house.name,
+                    w.house.customer.name if w.house_id and w.house.customer_id else "Company",
+                    w.house.name if w.house_id else "—",
                     str(w.employee),
                     w.service.name,
                     w.hours,
@@ -883,7 +886,9 @@ def export_business_overview():
                             "text", "",
                             f"Villa-linked invoices: "
                             f"{money(info['invoices'])}. "
-                            f"Payments: {money(info['paid'])}. "
+                            f"Service payments: {money(info['service_paid'])}. "
+                            f"Invoice payments: {money(info['invoice_paid'])}. "
+                            f"Unmatched payments: {money(info['unmatched'])}. "
                             f"Balance: "
                             f"{money(revenue + info['invoices'] - info['paid'])}."
                         ),
@@ -906,7 +911,7 @@ def export_business_overview():
                 [
                     (
                         w.work_date,
-                        w.house.name,
+                        w.house.name if w.house_id else "—",
                         str(w.employee),
                         w.service.name,
                         w.hours,
@@ -1017,7 +1022,7 @@ def export_business_overview():
                 [
                     (
                         p.payment_date,
-                        getattr(p, "reference", ""),
+                        p.invoice.invoice_number if p.invoice_id else (p.reference or "Unallocated"),
                         money(p.amount),
                     )
                     for p in supplier_payment_records[sid]
@@ -1112,8 +1117,8 @@ def export_business_overview():
                 [
                     (
                         w.work_date,
-                        w.house.customer.name,
-                        w.house.name,
+                        w.house.customer.name if w.house_id and w.house.customer_id else "Company",
+                        w.house.name if w.house_id else "—",
                         w.service.name,
                         w.hours,
                         w.description,
@@ -1144,10 +1149,9 @@ def export_business_overview():
                             "text", "",
                             f"Total revenue: {money(revenue)}. "
                             f"Recorded gross margin: {money(margin)}. "
-                            f"Supplier invoice expenses: "
+                            f"Customer invoice reimbursements: "
                             f"{money(info['invoices'])}. "
-                            f"Result after invoices: "
-                            f"{money(margin - info['invoices'])}."
+                            "Reimbursements are excluded from operating margin."
                         ),
                     ],
                 ),
@@ -1170,9 +1174,9 @@ def export_business_overview():
                             f"Employee work costs: {money(info['cost'])}. "
                             f"Recorded gross margin: "
                             f"{money(info['revenue'] - info['cost'])}. "
-                            f"Supplier invoice costs: "
+                            f"Company invoice costs: "
                             f"{money(info['invoices'])}. "
-                            f"Result after invoices: "
+                            f"Result after company invoices: "
                             f"{money(info['revenue'] - info['cost'] - info['invoices'])}."
                         ),
                     ],
@@ -1222,7 +1226,7 @@ def export_business_overview():
                     (
                         "text", "",
                         "The calculated result also subtracts "
-                        "supplier invoice expenses. This is not "
+                        "company-owned supplier invoice expenses. This is not "
                         "a complete accounting net profit."
                     ),
                     ("heading", "Customer balances", None),
@@ -1239,8 +1243,9 @@ def export_business_overview():
                         "Villa programs are charged for whole "
                         "overlapping months without proration. "
                         "Programs missing a start date are excluded. "
-                        "Payments cannot be reliably assigned to "
-                        "individual invoices or departments."
+                        "Linked payments are assigned to individual invoices. "
+                        "Unlinked supplier payments remain supplier-account payments. "
+                        "Unmatched customer references are excluded from allocated balances."
                     ),
                     ("heading", "Confidentiality", None),
                     (

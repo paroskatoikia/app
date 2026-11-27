@@ -7,6 +7,7 @@ from django.utils import timezone
 
 from .models import (
     House,
+    Ownership,
     IKA,
     Company_Gas,
     DepartmentCost,
@@ -50,6 +51,9 @@ def get_monthly_program_revenue(house, period_start):
         period_start.year,
         period_start.month,
     )
+
+    if house.is_company_property:
+        return ZERO
 
     programs = VillaProgram.objects.filter(house=house)
 
@@ -162,8 +166,7 @@ def allocated_employee_expenses(year, month, house=None, department=None):
 
 
 def company_invoice_queryset(queryset):
-    # Unassigned invoices are general company costs per existing Invoice help text.
-    return queryset.filter(Q(house__is_company_property=True) | Q(house__isnull=True))
+    return queryset.filter(ownership=Ownership.COMPANY)
 
 
 def get_company_monthly_costs(year, month):
@@ -186,6 +189,7 @@ def refresh_villa_month(house, year, month):
     )
 
     work = WorkEntry.objects.filter(
+        ownership=Ownership.CUSTOMER,
         house=house,
         work_date__range=(period_start, period_end),
     ).aggregate(
@@ -194,6 +198,7 @@ def refresh_villa_month(house, year, month):
     )
 
     invoices = Invoice.objects.filter(
+        ownership=Ownership.CUSTOMER,
         house=house,
         invoice_date__range=(period_start, period_end),
     ).aggregate(
@@ -205,7 +210,7 @@ def refresh_villa_month(house, year, month):
     invoice_expenses = money(invoices["expenses"])
 
     ika_cost, gas_cost = allocated_employee_expenses(year, month, house=house)
-    company_invoice_cost = invoice_expenses if house.is_company_property else ZERO
+    company_invoice_cost = ZERO  # Company invoices have no villa.
 
     program_revenue = get_monthly_program_revenue(
         house,
@@ -217,7 +222,7 @@ def refresh_villa_month(house, year, month):
         work_revenue + program_revenue
     )
 
-    # Total cost includes employee costs AND invoices.
+    # Total cost includes wages, allocated IKA/fuel and company invoice costs.
     total_cost = money(
         employee_cost + ika_cost + gas_cost + company_invoice_cost
     )
@@ -286,7 +291,7 @@ def refresh_villa_year(house, year):
         totals["work_revenue"] + totals["program_revenue"]
     )
 
-    # Yearly cost includes employee costs AND invoices.
+    # Yearly cost includes wages, allocated IKA/fuel and company invoice costs.
     total_cost = money(
         totals["employee_cost"] + totals["ika_cost"] + totals["gas_cost"] + totals["company_invoice_cost"]
     )
@@ -405,9 +410,8 @@ def refresh_department_month(
     employee_cost = money(work["employee_cost"])
     invoice_expenses = money(invoices["expenses"])
 
-    # Department invoices are reimbursed by the customer separately.
-    # Keep them visible, but do not include them in department costs
-    # or subtract them from gross margin.
+    # Customer invoices are reimbursements; only company invoices
+    # contribute to operating costs.
     total_revenue = work_revenue
     ika_cost, gas_cost = allocated_employee_expenses(year, month, house=house, department=department)
     company_invoice_cost = money(company_invoice_queryset(invoice_queryset).aggregate(v=Sum("amount"))["v"])
@@ -465,9 +469,7 @@ def refresh_department_year(
         ],
     )
 
-    # Invoice expenses are reimbursed separately by the customer.
-    # They remain visible in the summary but are excluded from costs
-    # and gross margin.
+    # Only company invoice costs reduce operating margin.
     total_revenue = totals["work_revenue"]
     total_cost = totals["employee_cost"] + totals["ika_cost"] + totals["gas_cost"] + totals["company_invoice_cost"]
     gross_margin = money(total_revenue - total_cost)
@@ -558,7 +560,7 @@ def rebuild_department_financial_summaries(department):
         flat=True,
     ).distinct()
 
-    house_ids = set(work_house_ids)
+    house_ids = set(work_house_ids) - {None}
     house_ids.update(invoice_house_ids)
     house_ids.update(old_summary_house_ids)
 
@@ -674,4 +676,11 @@ def compare_house_water_costs(house):
         ),
         "note": "Historical whole-volume comparison only. Progressive switching decisions must compare marginal costs; actual bill fees and tanker minimum delivery costs may differ.",
     }
+
+
+def ika_accrued_cost(record, today=None):
+    today = today or timezone.localdate()
+    end = min(today, record.end_date or today)
+    months = max(0, (end.year-record.start_date.year)*12 + end.month-record.start_date.month + 1)
+    return money(record.monthly_cost * months)
 

@@ -1,4 +1,3 @@
-
 from decimal import Decimal
 
 from django.db.models.signals import pre_save, post_save, post_delete
@@ -96,11 +95,15 @@ def refresh_work_entry_related_periods(work_entry):
 
 @receiver(post_save, sender=VillaProgram)
 def update_villa_program_finances(sender, instance, **kwargs):
+    if kwargs.get("raw", False):
+        return
     rebuild_villa_financial_summaries(instance.house)
 
 
 @receiver(post_delete, sender=VillaProgram)
 def delete_villa_program_finances(sender, instance, **kwargs):
+    if kwargs.get("raw", False):
+        return
     rebuild_villa_financial_summaries(instance.house)
 
 
@@ -110,6 +113,8 @@ def delete_villa_program_finances(sender, instance, **kwargs):
 
 @receiver(pre_save, sender=WorkEntry)
 def remember_old_work_entry(sender, instance, **kwargs):
+    if kwargs.get("raw", False):
+        return
     if instance.pk:
         instance._old_financial_values = (
             sender.objects.filter(pk=instance.pk)
@@ -126,21 +131,22 @@ def remember_old_work_entry(sender, instance, **kwargs):
 
 @receiver(post_save, sender=WorkEntry)
 def update_work_entry_finances(sender, instance, created, **kwargs):
+    if kwargs.get("raw", False):
+        return
+    # Work hours affect the allocation of IKA and fuel across all villas.
     old = getattr(instance, "_old_financial_values", None)
-
+    dates = {instance.work_date.year: instance.work_date}
     if old:
-        refresh_period(
-            old["house_id"],
-            old["service__department_id"],
-            old["work_date"],
-        )
-
-    refresh_work_entry_related_periods(instance)
+        dates[old["work_date"].year] = old["work_date"]
+    for affected_date in dates.values():
+        refresh_company_gas_period(affected_date)
 
 
 @receiver(post_delete, sender=WorkEntry)
 def delete_work_entry_finances(sender, instance, **kwargs):
-    refresh_work_entry_related_periods(instance)
+    if kwargs.get("raw", False):
+        return
+    refresh_company_gas_period(instance.work_date)
 
 
 # --------------------------------------------------
@@ -149,6 +155,8 @@ def delete_work_entry_finances(sender, instance, **kwargs):
 
 @receiver(pre_save, sender=Invoice)
 def remember_old_invoice(sender, instance, **kwargs):
+    if kwargs.get("raw", False):
+        return
     if instance.pk:
         instance._old_financial_values = (
             sender.objects.filter(pk=instance.pk)
@@ -161,6 +169,8 @@ def remember_old_invoice(sender, instance, **kwargs):
 
 @receiver(post_save, sender=Invoice)
 def update_invoice_finances(sender, instance, created, **kwargs):
+    if kwargs.get("raw", False):
+        return
     old = getattr(instance, "_old_financial_values", None)
 
     if old:
@@ -179,6 +189,8 @@ def update_invoice_finances(sender, instance, created, **kwargs):
 
 @receiver(post_delete, sender=Invoice)
 def delete_invoice_finances(sender, instance, **kwargs):
+    if kwargs.get("raw", False):
+        return
     refresh_period(
         instance.house_id,
         instance.department_id,
@@ -192,6 +204,8 @@ def delete_invoice_finances(sender, instance, **kwargs):
 
 @receiver(pre_save, sender=VillaServicePrice)
 def remember_old_villa_service_price(sender, instance, **kwargs):
+    if kwargs.get("raw", False):
+        return
     if instance.pk:
         instance._old_price_values = (
             sender.objects.filter(pk=instance.pk)
@@ -217,6 +231,8 @@ def refresh_service_price_work(price_values):
 
 @receiver(post_save, sender=VillaServicePrice)
 def update_villa_service_price_finances(sender, instance, **kwargs):
+    if kwargs.get("raw", False):
+        return
     old = getattr(instance, "_old_price_values", None)
 
     if old:
@@ -230,6 +246,8 @@ def update_villa_service_price_finances(sender, instance, **kwargs):
 
 @receiver(post_delete, sender=VillaServicePrice)
 def delete_villa_service_price_finances(sender, instance, **kwargs):
+    if kwargs.get("raw", False):
+        return
     refresh_service_price_work({
         "house_id": instance.house_id,
         "service_id": instance.service_id,
@@ -242,6 +260,8 @@ def delete_villa_service_price_finances(sender, instance, **kwargs):
 
 @receiver(pre_save, sender=Employee)
 def remember_old_employee_rate(sender, instance, **kwargs):
+    if kwargs.get("raw", False):
+        return
     """
     Remember the previous employee salary settings.
 
@@ -298,6 +318,8 @@ def refresh_employee_work_summaries(employee_id):
 
 @receiver(post_save, sender=Employee)
 def update_employee_rate_finances(sender, instance, created, **kwargs):
+    if kwargs.get("raw", False):
+        return
     """
     Refresh affected financial summaries when an employee's
     salary type or applicable salary rate changes.
@@ -325,3 +347,103 @@ def update_employee_rate_finances(sender, instance, created, **kwargs):
 
 
 
+
+
+# --------------------------------------------------
+# COMPANY GAS FINANCIAL REFRESH
+# --------------------------------------------------
+
+from .models import Company_Gas
+
+
+def refresh_company_gas_period(expense_date):
+    if not expense_date:
+        return
+
+    year = expense_date.year
+    houses = list(House.objects.all())
+    departments = list(Department.objects.all())
+    # Year refresh functions already rebuild all twelve monthly summaries.
+    for house in houses:
+        refresh_villa_year(house, year)
+    for department in departments:
+        refresh_department_year(department, year, house=None)
+        for house in houses:
+            refresh_department_year(department, year, house=house)
+
+
+@receiver(pre_save, sender=Company_Gas)
+def remember_old_company_gas(sender, instance, **kwargs):
+    if kwargs.get("raw", False):
+        return
+
+    if instance.pk:
+        instance._old_gas_values = (
+            sender.objects.filter(pk=instance.pk)
+            .values("date", "employee_id", "price_total")
+            .first()
+        )
+    else:
+        instance._old_gas_values = None
+
+
+@receiver(post_save, sender=Company_Gas)
+def update_company_gas_finances(sender, instance, **kwargs):
+    if kwargs.get("raw", False):
+        return
+
+    old = getattr(instance, "_old_gas_values", None)
+
+    if old:
+        old_date = old["date"]
+
+        if (
+            old_date.year,
+            old_date.month,
+        ) != (
+            instance.date.year,
+            instance.date.month,
+        ):
+            refresh_company_gas_period(old_date)
+
+    refresh_company_gas_period(instance.date)
+
+
+@receiver(post_delete, sender=Company_Gas)
+def delete_company_gas_finances(sender, instance, **kwargs):
+    if kwargs.get("raw", False):
+        return
+
+    refresh_company_gas_period(instance.date)
+
+
+from .models import IKA
+from django.utils import timezone
+
+@receiver(pre_save, sender=IKA)
+def remember_old_ika_period(sender, instance, **kwargs):
+    if kwargs.get("raw", False):
+        return
+    instance._old_ika_period = (
+        sender.objects.filter(pk=instance.pk).values("start_date", "end_date").first()
+        if instance.pk else None
+    )
+
+
+@receiver(post_save, sender=IKA)
+@receiver(post_delete, sender=IKA)
+def refresh_ika_finances(sender, instance, **kwargs):
+    if kwargs.get("raw", False):
+        return
+    today = timezone.localdate()
+    periods = [(instance.start_date, instance.end_date)]
+    old = getattr(instance, "_old_ika_period", None)
+    if old:
+        periods.append((old["start_date"], old["end_date"]))
+    years = set()
+    for start, end in periods:
+        end = min(end or today, today)
+        if start <= end:
+            years.update(range(start.year, end.year + 1))
+    for year in sorted(years):
+        refresh_company_gas_period(today.replace(year=year, month=1, day=1))

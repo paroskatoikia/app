@@ -20,6 +20,7 @@ from .services import (
 )
 
 from .models import (
+    Ownership,
     Customer,
     CustomerPayment,
     House,
@@ -60,7 +61,9 @@ class CustomerPaymentAdmin(admin.ModelAdmin):
         "customer",
         "payment_date",
         "amount",
+        "invoice",
         "reference",
+        "has_receipt",
     )
 
     list_filter = (
@@ -69,14 +72,27 @@ class CustomerPaymentAdmin(admin.ModelAdmin):
     )
 
     search_fields = (
+        "invoice__invoice_number",
+        "invoice__supplier__name",
         "customer__name",
         "reference",
         "notes",
     )
 
-    autocomplete_fields = ("customer",)
+    autocomplete_fields = ("customer", "invoice")
 
     ordering = ("-payment_date", "-id")
+
+
+    @admin.display(boolean=True, description="Receipt")
+    def has_receipt(self, obj):
+        return bool(obj.receipt)
+
+
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        if db_field.name == "invoice":
+            kwargs["queryset"] = Invoice.objects.filter(ownership=Ownership.CUSTOMER)
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
 
 # ==================================================
@@ -199,6 +215,7 @@ class CustomerAdmin(admin.ModelAdmin):
         # ------------------------------------------
 
         work_result = WorkEntry.objects.filter(
+            ownership=Ownership.CUSTOMER,
             house_id__in=house_ids,
             work_date__lte=today,
         ).aggregate(
@@ -214,6 +231,7 @@ class CustomerAdmin(admin.ModelAdmin):
         # ------------------------------------------
 
         invoice_result = Invoice.objects.filter(
+            ownership=Ownership.CUSTOMER,
             house_id__in=house_ids,
             invoice_date__lte=today,
         ).aggregate(
@@ -699,21 +717,99 @@ class VillaServicePriceAdmin(admin.ModelAdmin):
 # EMPLOYEE ADMIN
 # ==================================================
 
-class IKAInline(admin.TabularInline):
-    model = IKA
-    extra = 0
-
-
 class CompanyGasInline(admin.TabularInline):
     model = Company_Gas
     extra = 0
 
 
+from .models import IKAPackage
+from django.db import transaction
+from datetime import timedelta
+
+@admin.register(IKAPackage)
+class IKAPackageAdmin(admin.ModelAdmin):
+    list_display = ("name", "monthly_cost", "is_active")
+    list_filter = ("is_active",)
+    search_fields = ("name",)
+
+
+class IKAAssignmentForm(forms.ModelForm):
+    is_active = forms.BooleanField(required=False, initial=True, help_text="Uncheck to stop charges after this month.")
+    class Meta:
+        model = IKA
+        fields = ("employee", "package", "start_date", "notes")
+        labels = {"start_date": "Starting month (first day)"}
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["package"].required = True
+        self.fields["package"].queryset = IKAPackage.objects.filter(is_active=True) | IKAPackage.objects.filter(pk=self.instance.package_id)
+        if self.instance.pk:
+            self.fields["employee"].disabled = True
+            self.fields["start_date"].disabled = True
+            self.fields["is_active"].initial = self.instance.end_date is None
+        else:
+            self.fields["start_date"].initial = timezone.localdate().replace(day=1)
+
+    def clean(self):
+        data = super().clean()
+        if not self.instance.pk and not data.get("is_active"):
+            self.add_error("is_active", "New assignments must be active.")
+        if not self.instance.pk and data.get("employee") and data.get("start_date"):
+            if IKA.objects.filter(employee=data["employee"]).filter(models.Q(end_date__isnull=True) | models.Q(end_date__gte=data["start_date"])).exists():
+                self.add_error("start_date", "An existing assignment overlaps this month.")
+        return data
+
+
+from django.db import models
+
 @admin.register(IKA)
 class IKAAdmin(admin.ModelAdmin):
-    list_display = ("employee", "insurance_hours", "monthly_cost", "start_date", "end_date")
-    list_filter = ("insurance_hours", "start_date", "employee")
-    search_fields = ("employee__first_name", "employee__last_name", "notes")
+    form = IKAAssignmentForm
+    list_display = ("employee", "package_name", "monthly_cost", "start_date", "end_date", "active_status")
+    list_filter = ("employee", "package", "start_date")
+    search_fields = ("employee__first_name", "employee__last_name", "package_name", "notes")
+    readonly_fields = ("monthly_cost", "end_date")
+    fields = ("employee", "package", "start_date", "is_active", "monthly_cost", "end_date", "notes")
+
+    @admin.display(boolean=True, description="Is active")
+    def active_status(self, obj):
+        return obj.end_date is None
+
+    def has_change_permission(self, request, obj=None):
+        return super().has_change_permission(request, obj) and (obj is None or obj.end_date is None)
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+    @transaction.atomic
+    def save_model(self, request, obj, form, change):
+        today = timezone.localdate()
+        next_month = get_next_month(today.replace(day=1))
+        package = obj.package
+        if not change:
+            obj.monthly_cost = package.monthly_cost
+            obj.package_name = package.name
+            obj.save()
+            return
+        old = IKA.objects.select_for_update().get(pk=obj.pk)
+        active = form.cleaned_data["is_active"]
+        changed = old.package_id != package.pk or old.monthly_cost != package.monthly_cost or old.package_name != package.name
+        if not active:
+            if old.start_date >= next_month:
+                old.delete()
+                return
+            old.end_date = next_month - timedelta(days=1)
+            old.notes = obj.notes
+            old.save()
+        elif changed and old.start_date < next_month:
+            old.end_date = next_month - timedelta(days=1)
+            old.save()
+            IKA.objects.create(employee=old.employee, package=package, package_name=package.name, monthly_cost=package.monthly_cost, start_date=next_month, notes=obj.notes)
+        else:
+            obj.monthly_cost = package.monthly_cost
+            obj.package_name = package.name
+            obj.save()
 
 
 @admin.register(Company_Gas)
@@ -726,7 +822,7 @@ class CompanyGasAdmin(admin.ModelAdmin):
 
 @admin.register(Employee)
 class EmployeeAdmin(admin.ModelAdmin):
-    inlines = [IKAInline, CompanyGasInline]
+    inlines = [CompanyGasInline]
 
     list_display = (
         "first_name",
@@ -794,6 +890,7 @@ class WorkEntryAdmin(admin.ModelAdmin):
 
     list_display = (
         "work_date",
+        "ownership",
         "employee",
         "house",
         "service",
@@ -808,6 +905,7 @@ class WorkEntryAdmin(admin.ModelAdmin):
     )
 
     list_filter = (
+        "ownership",
         "work_date",
         "employee",
         "house",
@@ -837,7 +935,7 @@ class WorkEntryAdmin(admin.ModelAdmin):
 
     fieldsets = (
         ("Work information", {"fields": (
-            "employee", "house", "service", "work_date", "hours", "description",
+            "ownership", "employee", "house", "service", "work_date", "hours", "description",
         )}),
         ("Additional charges", {"fields": (
             "additional_charges", "additional_charges_notes",
@@ -868,6 +966,7 @@ class WorkEntryAdmin(admin.ModelAdmin):
 class InvoiceAdmin(admin.ModelAdmin):
 
     list_display = (
+        "ownership",
         "invoice_date",
         "supplier",
         "invoice_number",
@@ -877,6 +976,7 @@ class InvoiceAdmin(admin.ModelAdmin):
     )
 
     list_filter = (
+        "ownership",
         "invoice_date",
         "department",
         "house",
@@ -889,6 +989,16 @@ class InvoiceAdmin(admin.ModelAdmin):
         "department__name",
         "house__name",
     )
+
+    autocomplete_fields = ("house", "supplier", "department")
+
+    def get_search_results(self, request, queryset, search_term):
+        queryset, distinct = super().get_search_results(request, queryset, search_term)
+        if request.GET.get("field_name") == "invoice":
+            scope = {"customerpayment": Ownership.CUSTOMER, "supplierpayment": Ownership.COMPANY}.get(request.GET.get("model_name"))
+            if scope and request.GET.get("app_label") == "core":
+                queryset = queryset.filter(ownership=scope)
+        return queryset, distinct
 
     date_hierarchy = "invoice_date"
 
@@ -935,6 +1045,7 @@ class SupplierPaymentAdmin(admin.ModelAdmin):
         "supplier",
         "payment_date",
         "amount",
+        "invoice",
         "reference",
     )
 
@@ -944,15 +1055,23 @@ class SupplierPaymentAdmin(admin.ModelAdmin):
     )
 
     search_fields = (
+        "invoice__invoice_number",
+        "invoice__supplier__name",
         "supplier__name",
         "reference",
         "notes",
     )
 
-    autocomplete_fields = ("supplier",)
+    autocomplete_fields = ("supplier", "invoice")
 
     ordering = ("-payment_date", "-id")
 
+
+
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        if db_field.name == "invoice":
+            kwargs["queryset"] = Invoice.objects.filter(ownership=Ownership.COMPANY)
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
 
 # ==================================================
@@ -1469,6 +1588,7 @@ class GroupedWorkEntryAdmin(WorkEntryAdmin):
 
     list_display = (
         "work_date",
+        "ownership",
         "employee",
         "compact_service",
         "hours",
@@ -1486,6 +1606,7 @@ class GroupedWorkEntryAdmin(WorkEntryAdmin):
     )
 
     list_filter = (
+        "ownership",
         ("house", admin.RelatedOnlyFieldListFilter),
         WorkEntryMonthFilter,
         "house__customer",
@@ -1530,6 +1651,7 @@ class GroupedWorkEntryAdmin(WorkEntryAdmin):
 
         if obj:
             return tuple(fields) + (
+                "ownership",
                 "employee",
                 "house",
                 "service",
@@ -1544,6 +1666,7 @@ class GroupedWorkEntryAdmin(WorkEntryAdmin):
         )
 
         fields = (
+            "ownership",
             "employee",
             "house",
             "service",
@@ -1581,3 +1704,4 @@ class GroupedWorkEntryAdmin(WorkEntryAdmin):
         WorkEntry.objects.filter(
             pk__in=queryset.values_list("pk", flat=True)
         ).delete()
+

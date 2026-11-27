@@ -3,14 +3,12 @@ from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
-from .views import CompanyGasViewSet
 
 from rest_framework_simplejwt.views import (
     TokenObtainPairView,
     TokenRefreshView,
 )
 
-from .views import ImportantJobReminderViewSet
 from .views import (
     CustomerViewSet,
     HouseViewSet,
@@ -29,6 +27,9 @@ from .views import (
     CustomerPaymentViewSet,
     HouseInspectionViewSet,
     WeeklyChecksView,
+    ImportantJobReminderViewSet,
+    CompanyGasViewSet,
+    IKAViewSet,
 )
 
 from .weekly_checks_api import (
@@ -100,7 +101,7 @@ router.register(
     basename="customer-payment",
 )
 
-# Weekly house checks and existing water measurement models
+# Weekly house checks and water measurements
 router.register(
     "house-inspections",
     HouseInspectionViewSet,
@@ -125,16 +126,25 @@ router.register(
     basename="water-tank-readings",
 )
 
+# Important jobs
 router.register(
     r"important-job-reminders",
     ImportantJobReminderViewSet,
     basename="important-job-reminders",
 )
 
+# Company fuel expenses
 router.register(
     r"company-gas",
     CompanyGasViewSet,
     basename="company-gas",
+)
+
+# IKA recurring monthly insurance expenses
+router.register(
+    r"ika",
+    IKAViewSet,
+    basename="ika",
 )
 
 

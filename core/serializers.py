@@ -1,5 +1,28 @@
-
 from rest_framework import serializers
+
+from copy import copy
+from django.core.exceptions import ValidationError as DjangoValidationError
+
+
+class ModelCleanSerializer(serializers.ModelSerializer):
+    """Apply the same business rules in the API and Django admin."""
+
+    def validate(self, attrs):
+        attrs = super().validate(attrs)
+        candidate = copy(self.instance) if self.instance is not None else self.Meta.model()
+        for name, value in attrs.items():
+            setattr(candidate, name, value)
+        try:
+            candidate.clean()
+        except DjangoValidationError as exc:
+            if hasattr(exc, "message_dict"):
+                raise serializers.ValidationError({
+                    ("non_field_errors" if key == "__all__" else key): value
+                    for key, value in exc.message_dict.items()
+                }) from exc
+            raise serializers.ValidationError(exc.messages) from exc
+        return attrs
+
 
 from .models import (
     Customer,
@@ -23,7 +46,7 @@ class CustomerSerializer(serializers.ModelSerializer):
         fields = "__all__"
 
 
-class HouseSerializer(serializers.ModelSerializer):
+class HouseSerializer(ModelCleanSerializer):
     customer_name = serializers.CharField(
         source="customer",
         read_only=True,
@@ -114,11 +137,14 @@ class EmployeeSerializer(serializers.ModelSerializer):
         return str(obj)
 
 
-class WorkEntrySerializer(serializers.ModelSerializer):
+class WorkEntrySerializer(ModelCleanSerializer):
+    ownership = serializers.ChoiceField(choices=(("company", "Company"), ("customer", "Customer")))
+    ownership_display = serializers.CharField(source="get_ownership_display", read_only=True)
     employee_name = serializers.SerializerMethodField()
     house_name = serializers.CharField(
         source="house",
         read_only=True,
+        allow_null=True,
     )
     service_name = serializers.CharField(
         source="service",
@@ -156,7 +182,9 @@ class WorkEntrySerializer(serializers.ModelSerializer):
         return str(obj.employee)
 
 
-class InvoiceSerializer(serializers.ModelSerializer):
+class InvoiceSerializer(ModelCleanSerializer):
+    ownership = serializers.ChoiceField(choices=(("company", "Company"), ("customer", "Customer")))
+    ownership_display = serializers.CharField(source="get_ownership_display", read_only=True)
     department_name = serializers.CharField(
         source="department",
         read_only=True,
@@ -234,7 +262,8 @@ class SupplierSerializer(serializers.ModelSerializer):
         fields = "__all__"
 
 
-class SupplierPaymentSerializer(serializers.ModelSerializer):
+class SupplierPaymentSerializer(ModelCleanSerializer):
+    invoice_number = serializers.CharField(source="invoice.invoice_number", read_only=True, allow_null=True, default=None)
     supplier_name = serializers.CharField(
         source="supplier.name",
         read_only=True,
@@ -245,7 +274,8 @@ class SupplierPaymentSerializer(serializers.ModelSerializer):
         fields = "__all__"
 
 
-class CustomerPaymentSerializer(serializers.ModelSerializer):
+class CustomerPaymentSerializer(ModelCleanSerializer):
+    invoice_number = serializers.CharField(source="invoice.invoice_number", read_only=True, allow_null=True, default=None)
     customer_name = serializers.CharField(
         source="customer.name",
         read_only=True,
@@ -375,92 +405,7 @@ class ImportantJobReminderSerializer(
             "created_at",
             "updated_at",
         ]
-from .models import ImportantJobReminder
 
-
-class ImportantJobReminderSerializer(
-    serializers.ModelSerializer
-):
-
-    customer_name = serializers.StringRelatedField(
-        source="customer",
-        read_only=True,
-    )
-
-    days_remaining = serializers.IntegerField(
-        read_only=True,
-    )
-
-    spare_days = serializers.IntegerField(
-        read_only=True,
-    )
-
-    notification_days = serializers.FloatField(
-        read_only=True,
-    )
-
-    recommended_start_date = serializers.DateField(
-        read_only=True,
-    )
-
-    latest_start_date = serializers.DateField(
-        read_only=True,
-    )
-
-    importance = serializers.CharField(
-        read_only=True,
-    )
-
-    importance_score = serializers.IntegerField(
-        read_only=True,
-    )
-
-    email_required = serializers.BooleanField(
-        read_only=True,
-    )
-
-    is_overdue = serializers.BooleanField(
-        read_only=True,
-    )
-
-    class Meta:
-
-        model = ImportantJobReminder
-
-        fields = [
-            "id",
-            "customer",
-            "customer_name",
-            "description",
-            "deadline",
-            "procedure_days",
-            "days_remaining",
-            "spare_days",
-            "notification_days",
-            "recommended_start_date",
-            "latest_start_date",
-            "importance",
-            "importance_score",
-            "email_required",
-            "is_overdue",
-            "completed",
-            "completed_at",
-            "last_notification_level",
-            "last_notification_at",
-            "created_at",
-            "updated_at",
-        ]
-
-        read_only_fields = [
-            "completed_at",
-            "last_notification_level",
-            "last_notification_at",
-            "created_at",
-            "updated_at",
-        ]
-
-    from .models import Company_Gas
-    from rest_framework import serializers
 from rest_framework import serializers
 from .models import Company_Gas
 
@@ -505,6 +450,14 @@ class CompanyGasSerializer(serializers.ModelSerializer):
         ]
 
 
+from .models import IKA
 
+class IKASerializer(serializers.ModelSerializer):
+    accrued_cost = serializers.SerializerMethodField()
+    class Meta:
+        model = IKA
+        fields = ("id", "employee", "package_name", "monthly_cost", "start_date", "end_date", "accrued_cost")
 
-
+    def get_accrued_cost(self, obj):
+        from .services import ika_accrued_cost
+        return str(ika_accrued_cost(obj))

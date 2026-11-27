@@ -1,4 +1,3 @@
-
 import { useEffect, useMemo, useState } from "react";
 import {
   LayoutDashboard, Building2, Users, UserRound, BriefcaseBusiness,
@@ -17,6 +16,63 @@ const API_URL = (import.meta.env.VITE_API_URL || "http://127.0.0.1:8000/api").re
 
 let uiLanguage = typeof localStorage !== "undefined" && localStorage.getItem("pk_language") === "el" ? "el" : "en";
 const greek = {
+  "COMPANY": "ΕΤΑΙΡΕΙΑ", "CUSTOMERS": "ΠΕΛΑΤΕΣ", "OPERATIONS": "ΛΕΙΤΟΥΡΓΙΕΣ",
+  "Company": "Εταιρεία", "Ownership": "Ιδιοκτησία", "Company Invoices": "Τιμολόγια εταιρείας", "Customer Invoices": "Τιμολόγια πελατών", "Payment status": "Κατάσταση πληρωμής",
+  "Company Invoice Payments": "Πληρωμές τιμολογίων εταιρείας",
+  "Customer Payments & Invoices": "Εισπράξεις & τιμολόγια πελατών",
+  "Company Invoice Payments table": "Πίνακας πληρωμών τιμολογίων εταιρείας",
+  "Customer Payments & Invoices table": "Πίνακας εισπράξεων πελατών",
+  "All Invoices": "Όλα τα τιμολόγια",
+  "Unpaid services": "Ανεξόφλητες υπηρεσίες",
+  "Paid services": "Εξοφλημένες υπηρεσίες",
+  "Unpaid invoices": "Ανεξόφλητα τιμολόγια",
+  "Paid invoices": "Εξοφλημένα τιμολόγια",
+  "charts": "γραφήματα",
+  "Search supplier charts...": "Αναζήτηση γραφημάτων προμηθευτών...",
+  "Search customer charts...": "Αναζήτηση γραφημάτων πελατών...",
+  "Supplier Payments table": "Πίνακας πληρωμών προμηθευτών",
+  "Customer Payments table": "Πίνακας εισπράξεων πελατών",
+  "Only payments linked to an invoice are allocated. General payments remain at account level.": "Μόνο πληρωμές με αναφορά αριθμού τιμολογίου αντιστοιχίζονται σε τιμολόγια. Οι γενικές πληρωμές παραμένουν στον λογαριασμό.",
+  "Account-level payments and outstanding balances, sorted by total paid.": "Πληρωμές και ανεξόφλητα υπόλοιπα ανά λογαριασμό, κατά σύνολο πληρωμών.",
+  "Switch to bar charts": "Προβολή ραβδογραμμάτων",
+  "Switch to pie charts": "Προβολή κυκλικών γραφημάτων",
+  "Switch to bar chart": "Προβολή ραβδογράμματος",
+  "Switch to pie chart": "Προβολή κυκλικού γραφήματος",
+  "Search payments, names, references...": "Αναζήτηση πληρωμών, ονομάτων, αναφορών...",
+  "Search invoice number, customer, villa or supplier": "Αναζήτηση αριθμού τιμολογίου, πελάτη, κατοικίας ή προμηθευτή",
+  "No matching charts.": "Δεν βρέθηκαν αντίστοιχα γραφήματα.",
+  "No matching payments.": "Δεν βρέθηκαν αντίστοιχες πληρωμές.",
+  "No matching invoices.": "Δεν βρέθηκαν αντίστοιχα τιμολόγια.",
+  "All": "Όλα",
+  "Ambiguous reference": "Ασαφής αναφορά",
+  "Payments / receipts": "Πληρωμές / αποδεικτικά",
+  "Allocated payments": "Αντιστοιχισμένες πληρωμές",
+  "Invoiced": "Τιμολογημένα",
+  "Customer invoice payment register": "Μητρώο εξόφλησης τιμολογίων πελατών",
+  "Receipt": "Αποδεικτικό πληρωμής",
+  "Invoice reference": "Αναφορά τιμολογίου",
+  "Payment type": "Τύπος πληρωμής",
+  "Payment performance by supplier": "Πληρωμές ανά προμηθευτή",
+  "Payment performance by customer": "Πληρωμές ανά πελάτη",
+  "INDIVIDUAL ACCOUNT CHARTS": "ΓΡΑΦΗΜΑΤΑ ΑΝΑ ΛΟΓΑΡΙΑΣΜΟ",
+  "PAYMENT RECORDS": "ΚΑΤΑΧΩΡΙΣΕΙΣ ΠΛΗΡΩΜΩΝ",
+  "Paid vs outstanding": "Εξοφλημένα και ανεξόφλητα υπόλοιπα",
+  "Paid vs unpaid": "Εξοφλημένα και ανεξόφλητα",
+  "Total outstanding": "Συνολικό ανεξόφλητο υπόλοιπο",
+  "Unmatched payments": "Μη αντιστοιχισμένες πληρωμές",
+  "Invoice paid": "Εξοφλήσεις τιμολογίων",
+  "Invoice charges": "Χρεώσεις τιμολογίων",
+  "Service paid": "Εξοφλήσεις υπηρεσιών",
+  "Service charges": "Χρεώσεις υπηρεσιών",
+  "Total charges": "Σύνολο χρεώσεων",
+  "Credit": "Πίστωση",
+  "Charged": "Χρεώσεις",
+  "Unmatched": "Μη αντιστοιχισμένες πληρωμές",
+  "Invoice balance": "Υπόλοιπο τιμολογίων",
+  "Service balance": "Υπόλοιπο υπηρεσιών",
+  "Invoice reimbursements": "Εξοφλήσεις τιμολογίων",
+  "Services & subscriptions": "Υπηρεσίες & συνδρομές",
+  "Unpaid": "Ανεξόφλητα",
   "Customer statement": "Μηνιαία κατάσταση πελάτη",
   "Download PDF": "Λήψη PDF",
   "Download ZIP": "Λήψη ZIP",
@@ -79,6 +135,8 @@ const greek = {
   "Gross margin": "Μικτό περιθώριο",
   "Reimbursable invoices": "Τιμολόγια προς αποζημίωση",
   "Employee work costs + company invoices": "Κόστος εργασίας + εταιρικά τιμολόγια",
+  "Employee work costs + company invoices + fuel + IKA + department costs": "Κόστος εργασίας + εταιρικά τιμολόγια + καύσιμα",
+  "Fuel or IKA costs unavailable — total incomplete": "Μη διαθέσιμο κόστος καυσίμων — ελλιπές σύνολο",
   "Employee cost": "Κόστος εργαζομένων",
   "Date": "Ημερομηνία",
   "Amount": "Ποσό",
@@ -117,10 +175,15 @@ const greek = {
   "Customer statistics": "Στατιστικά πελατών",
   "Supplier statistics": "Στατιστικά προμηθευτών",
   "Salary": "Μισθός",
+  "IKA / month": "ΙΚΑ / μήνα",
   "Salary type": "Τύπος αμοιβής",
   "Service type": "Τύπος υπηρεσίας",
   "Revenue earned": "Παραγόμενα έσοδα",
   "Gross earned": "Μικτές αποδοχές",
+  "Subscription revenue": "Έσοδα συνδρομών",
+  "Direct work revenue": "Έσοδα επιπλέον εργασιών",
+  "Employee financial data incomplete": "Ελλιπή οικονομικά στοιχεία εργαζομένων",
+  "Salary cost + IKA": "Μισθολογικό κόστος + ΙΚΑ",
   "Recorded salary cost": "Καταγεγραμμένο μισθολογικό κόστος",
   "Program": "Πρόγραμμα",
   "Monthly price": "Μηνιαία τιμή",
@@ -246,7 +309,7 @@ const addModels = {
   villas: ["house", "Add Villa"], customers: ["customer", "Add Customer"],
   suppliers: ["supplier", "Add Supplier"], employees: ["employee", "Add Employee"],
   departments: ["department", "Add Department"], services: ["servicecategory", "Add Service"],
-  workEntries: ["workentry", "Add Work Entry"], invoices: ["invoice", "Add Invoice"],
+  companyInvoices: ["invoice", "Add Invoice"], customerInvoices: ["invoice", "Add Invoice"], workEntries: ["workentry", "Add Work Entry"], invoices: ["invoice", "Add Invoice"],
   customerPayments: ["customerpayment", "Add Customer Payment"], supplierPayments: ["supplierpayment", "Add Supplier Payment"],
   companyGas: ["company_gas", "Add Fuel Expense"], programs: ["house", "Add Program"]
 };
@@ -256,7 +319,9 @@ function AddRecord({page}) {
   const [model, label] = entry;
   // Programs are managed as inlines on existing villas, not a standalone admin model.
   const path = `/admin/core/${model}/${page === "programs" ? "" : "add/"}`;
-  const href = new URL(path, new URL(API_URL, window.location.origin).origin).href;
+  const url = new URL(path, new URL(API_URL, window.location.origin).origin);
+  if (page === "companyInvoices" || page === "customerInvoices") url.searchParams.set("ownership", page === "companyInvoices" ? "company" : "customer");
+  const href = url.href;
   return <a className="refresh-button" href={href} target="_blank" rel="noopener noreferrer" style={{textDecoration:"none"}}>+ {tr(label)}</a>;
 }
 function InvoiceLink({record}) {
@@ -278,6 +343,8 @@ const ENDPOINTS = {
   workEntries: "/work-entries/",
   programs: "/programs/",
   invoices: "/invoices/",
+  companyGas: "/company-gas/",
+  ika: "/ika/",
   servicePrices: "/service-prices/",
   departmentCosts: "/department-costs/",
   suppliers: "/suppliers/",
@@ -287,26 +354,28 @@ const ENDPOINTS = {
 
 const navigation = [
   { id: "overview", label: "Overview", icon: LayoutDashboard },
-  { id: "importantJobs", label: "Important Jobs", icon: Bell },
+  { id: "companyInvoices", label: "Company Invoices", icon: FileText, group: "COMPANY" },
+  { id: "supplierPayments", label: "Company Invoice Payments", icon: CreditCard },
+  { id: "companyGas", label: "Company Gas", icon: Truck },
+  { id: "customers", label: "Customers", icon: Users, group: "CUSTOMERS" },
   { id: "villas", label: "Villas", icon: Building2 },
+  { id: "customerInvoices", label: "Customer Invoices", icon: FileText },
+  { id: "customerPayments", label: "Customer Payments & Invoices", icon: Wallet },
+  { id: "importantJobs", label: "Important Jobs", icon: Bell, group: "OPERATIONS" },
   { id: "houseChecks", label: "House Checks", icon: ClipboardCheck },
   { id: "waterMeasurements", label: "Water Measurements", icon: Droplets },
-  { id: "customers", label: "Customers", icon: Users },
-  { id: "customerPayments", label: "Customer Payments", icon: Wallet },
-  { id: "suppliers", label: "Suppliers", icon: Truck },
-  { id: "supplierPayments", label: "Supplier Payments", icon: CreditCard },
   { id: "employees", label: "Employees", icon: UserRound },
-  { id: "companyGas", label: "Company Gas", icon: Truck },
   { id: "departments", label: "Departments", icon: BriefcaseBusiness },
   { id: "services", label: "Services", icon: Sprout },
   { id: "workEntries", label: "Work Entries", icon: ClipboardList },
-  { id: "invoices", label: "Invoices", icon: FileText },
+  { id: "suppliers", label: "Suppliers", icon: Truck },
+  { id: "invoices", label: "All Invoices", icon: FileText },
 ];
 
 const emptyData = {
   villas: [], customers: [], employees: [], departments: [],
   services: [], workEntries: [], programs: [], invoices: [],
-  servicePrices: [], departmentCosts: [],
+  servicePrices: [], departmentCosts: [], companyGas: [], ika: [],
   suppliers: [], supplierPayments: [], customerPayments: [],
 };
 
@@ -361,6 +430,7 @@ function getRelatedName(value, fallback = "—") {
 
 // Programs provide house_name directly in the Django API.
 function getVillaName(entry, villas) {
+  if (entry.ownership === "company") return tr("Company");
   if (entry.house_name) return entry.house_name;
 
   const relation = entry.house ?? entry.villa;
@@ -600,9 +670,59 @@ function buildServicePerformance(services, workEntries, departments) {
     .sort((a, b) => b.revenue - a.revenue);
 }
 
+// Attribute each villa/program/month fee once, in proportion to covered hours.
+function allocateEmployeeSubscriptionRevenue(workEntries, programs, services, departments, villas) {
+  const normalize = (value) => String(value ?? "").trim().toLowerCase();
+  const types = new Map([
+    ["basic property management", "bp"],
+    ["garden maintenance (monthly)", "gardening"],
+    ["pool maintenance (monthly)", "pool"],
+  ]);
+  const serviceMap = new Map(services.map(s => [String(s.id), s]));
+  const departmentMap = new Map(departments.map(d => [String(d.id), d.name]));
+  const internal = new Set(villas.filter(v => v.is_company_property).map(v => String(v.id)));
+  const programMap = new Map(programs.map(p => [`${relationId(p.house)}|${p.program_type}`, p]));
+  const groups = new Map();
+  const today = getTodayLocalDate();
+  for (const entry of workEntries) {
+    if (entry.ownership !== "customer") continue;
+    const date = entry.work_date;
+    const hours = number(entry.hours);
+    if (!date || date > today || hours <= 0 || number(entry.customer_charge) !== 0) continue;
+    const service = serviceMap.get(String(relationId(entry.service)));
+    if (!service) continue;
+    const type = types.get(normalize(service.name));
+    if (!type || types.get(normalize(departmentMap.get(String(relationId(service.department))))) !== type) continue;
+    const house = String(relationId(entry.house));
+    if (internal.has(house)) continue;
+    const program = programMap.get(`${house}|${type}`);
+    if (!program || (program.start_date && date < program.start_date) || (program.end_date && date > program.end_date)) continue;
+    const employee = relationId(entry.employee);
+    if (employee == null) continue;
+    const key = `${house}|${type}|${date.slice(0, 7)}`;
+    if (!groups.has(key)) groups.set(key, { cents: Math.round(number(program.price) * 100), hours: new Map() });
+    const group = groups.get(key);
+    const id = String(employee);
+    group.hours.set(id, (group.hours.get(id) || 0) + hours);
+  }
+  const allocated = new Map();
+  for (const { cents, hours } of groups.values()) {
+    const total = [...hours.values()].reduce((sum, h) => sum + h, 0);
+    let cumulative = 0, previous = 0;
+    for (const [id, h] of [...hours.entries()].sort(([a], [b]) => a.localeCompare(b))) {
+      cumulative += h;
+      const current = Math.round(cents * cumulative / total);
+      allocated.set(id, (allocated.get(id) || 0) + current - previous);
+      previous = current;
+    }
+  }
+  return allocated;
+}
+
 // Builds employee performance from their recorded work entries.
-// Gross earned = revenue charged to customers - recorded employee work cost.
-function buildEmployeePerformance(employees, workEntries, departments) {
+// Gross earned = direct work revenue + allocated subscription revenue - recorded employee work cost - accrued IKA.
+function buildEmployeePerformance(employees, workEntries, departments, ikaRecords, programs, services, villas) {
+  const subscription = allocateEmployeeSubscriptionRevenue(workEntries, programs, services, departments, villas);
   const departmentMap = new Map(
     departments.map((department) => [String(department.id), department.name])
   );
@@ -646,7 +766,8 @@ function buildEmployeePerformance(employees, workEntries, departments) {
         salaryDisplay: salaryField === null || salaryField === undefined
           ? "—"
           : `${money(salaryField)} ${salaryUnit}`,
-        revenue: 0,
+        subscriptionRevenue: (subscription.get(String(employee.id)) || 0) / 100,
+        revenue: (subscription.get(String(employee.id)) || 0) / 100,
         expenses: 0,
         grossProfit: 0,
       }];
@@ -664,6 +785,11 @@ function buildEmployeePerformance(employees, workEntries, departments) {
 
     current.revenue += number(entry.customer_charge);
     current.expenses += number(entry.employee_cost);
+  });
+
+  ikaRecords.forEach((record) => {
+    const current = totals.get(String(relationId(record.employee)));
+    if (current) current.expenses += number(record.accrued_cost);
   });
 
   return [...totals.values()]
@@ -952,12 +1078,9 @@ function PerformancePage({
   );
 }
 
-// Match the backend invoice classification: unassigned or company-owned.
-function isCompanyInvoice(invoice, villas) {
-  const houseId = relationId(invoice.house ?? invoice.villa ?? invoice.house_id ?? invoice.villa_id);
-  if (houseId == null) return true;
-  return villas.find((villa) => String(villa.id) === String(houseId))?.is_company_property === true;
-}
+// Ownership is authoritative; villa assignment is not a classification.
+function isCompanyInvoice(invoice) { return invoice.ownership === "company"; }
+function isCustomerInvoice(invoice) { return invoice.ownership === "customer"; }
 
 // Builds total income, outcome and net result for every villa.
 function buildVillaChart(villas, workEntries, programs, invoices) {
@@ -1338,8 +1461,8 @@ function DepartmentBoxplots({ records, title }) {
 
 function PaymentComparisonChart({ displayType, paid, unpaid }) {
   const values = [
-    { name: "Paid", amount: Math.max(0, paid), color: "#718477" },
-    { name: "Unpaid", amount: Math.max(0, unpaid), color: "#b99b65" },
+    { name: tr("Paid"), amount: Math.max(0, paid), color: "#718477" },
+    { name: tr("Unpaid"), amount: Math.max(0, unpaid), color: "#b99b65" },
   ];
   if (displayType === "pie") {
     return <ResponsiveContainer width="100%" height="100%"><PieChart>
@@ -1455,6 +1578,7 @@ function AccountAnalytics({ kind, data, onRefresh, token }) {
       id: p.id, name: p.name || `#${p.id}`, charged: 0, paid: 0,
       departments: new Map(),
     }]));
+    const split = isSupplier ? null : customerAccountSplit(data, today);
     const costRecords = [];
     const villaCustomer = new Map(data.villas.map((v) => [String(v.id), relationId(v.customer)]));
 
@@ -1469,6 +1593,7 @@ function AccountAnalytics({ kind, data, onRefresh, token }) {
 
     if (isSupplier) {
       data.invoices.forEach((invoice) => {
+        if (!isCompanyInvoice(invoice, data.villas)) return;
         if (invoice.invoice_date && invoice.invoice_date > today) return;
         const id = relationId(invoice.supplier ?? invoice.supplier_entity);
         addCharge(id, departmentName(invoice.department, data.departments), invoice.amount);
@@ -1521,16 +1646,16 @@ function AccountAnalytics({ kind, data, onRefresh, token }) {
 
     return {
       rows: [...partyMap.values()].map((p) => ({
-        ...p, balance: p.charged - p.paid,
+        ...p, ...(split?.get(String(p.id)) || {}), balance: isSupplier ? p.charged - p.paid : split.get(String(p.id)).serviceBalance + split.get(String(p.id)).invoiceBalance,
         searchText: p.name.toLowerCase(),
       })).sort((a, b) => b.charged - a.charged),
       costs: costRecords,
     };
   }, [parties, payments, data, isSupplier, today]);
 
-  const total = rows.reduce((a, r) => a + r.charged, 0);
+  const total = rows.reduce((a, r) => a + (isSupplier ? r.charged : r.serviceCharges+r.invoiceCharges), 0);
   const paid = rows.reduce((a, r) => a + r.paid, 0);
-  const balance = total - paid;
+  const balance = isSupplier ? total - paid : rows.reduce((a,r)=>a+r.serviceBalance+r.invoiceBalance,0);
   const filteredAccounts = rows.filter((r) => r.searchText.includes(accountSearch.trim().toLowerCase()));
   const accountPages = Math.max(1, Math.ceil(filteredAccounts.length / PAGE_SIZE));
   const safeAccountPage = Math.min(accountPage, accountPages);
@@ -1580,11 +1705,10 @@ function AccountAnalytics({ kind, data, onRefresh, token }) {
           <input value={accountSearch} onChange={(e) => {setAccountSearch(e.target.value);setAccountPage(1);}} placeholder={`Search ${isSupplier ? "suppliers" : "customers"}...`} />
         </div>
         <div className="table-scroll"><table>
-          <thead><tr><th>{tr("Name")}</th><th>{tr("Charges")}</th><th>{tr("Paid")}</th><th>{tr("Unpaid / credit")}</th>{isSupplier && <th>{tr("Department breakdown")}</th>}{!isSupplier && <th style={{textAlign:"right"}}>{tr("Customer statement")}</th>}</tr></thead>
+          <thead><tr><th>{tr("Name")}</th>{isSupplier ? <><th>Charges</th><th>Paid</th><th>Unpaid / credit</th></> : <>{["Service charges","Service paid","Service balance","Invoice charges","Invoice paid","Invoice balance","Unmatched payments","Total outstanding"].map(x=><th key={x}>{tr(x)}</th>)}</>}{isSupplier && <th>{tr("Department breakdown")}</th>}{!isSupplier && <th style={{textAlign:"right"}}>{tr("Customer statement")}</th>}</tr></thead>
           <tbody>{visibleAccounts.map((r) => <tr key={r.id}>
             <td>{r.name}</td>
-            <td>{money(r.charged)}</td><td>{money(r.paid)}</td>
-            <td>{r.balance < 0 ? `${money(-r.balance)} credit` : money(r.balance)}</td>
+            {isSupplier ? <><td>{money(r.charged)}</td><td>{money(r.paid)}</td><td>{money(r.balance)}</td></> : <>{[r.serviceCharges,r.servicePaid,r.serviceBalance,r.invoiceCharges,r.invoicePaid,r.invoiceBalance,r.unmatched,r.outstanding].map((v,i)=><td key={i}>{money(v)}</td>)}</>}
             {isSupplier && <td>{[...r.departments.entries()].map(([d, amount]) => `${d}: ${money(amount)}`).join(" · ") || "—"}</td>}
             {!isSupplier && <td><div style={{display:"flex",justifyContent:"flex-end",alignItems:"center",gap:6,whiteSpace:"nowrap"}}>
               <button type="button" className="refresh-button" title={tr("Preview")} aria-label={`${tr("Preview")} — ${r.name}`} onClick={() => previewCustomerStatement(r)} style={{padding:"5px 8px",fontSize:11,gap:4,whiteSpace:"nowrap"}}><FileText size={12}/> {tr("Preview")}</button>
@@ -1597,15 +1721,15 @@ function AccountAnalytics({ kind, data, onRefresh, token }) {
         {exportError && <p role="alert" style={{color:"#b42318",marginTop:12}}>{exportError}</p>}
         {!visibleAccounts.length && <div className="empty-state">No matching accounts.</div>}
         <PaginationControls page={safeAccountPage} totalPages={accountPages} totalItems={filteredAccounts.length} onPageChange={setAccountPage}/>
-        <p className="muted" style={{ marginTop: 12 }}>Payments are recorded against the entire account, not individual invoices or departments. Department-level paid/unpaid amounts cannot be determined. {!isSupplier && "Customer programs without start dates are excluded from historical totals. "}Negative balances are credits.</p>
+        <p className="muted" style={{ marginTop: 12 }}>{isSupplier ? "Supplier payments remain account-level." : "Service payments and invoice reimbursements are separate. Unmatched references do not settle either balance."} {!isSupplier && "Customer programs without start dates are excluded from historical totals. "}Negative balances are credits.</p>
       </section>
       <section className="panel" style={{ marginTop: 20 }}>
         <div className="panel-heading">
-          <div><p className="eyebrow">{tr("PAYMENT STATUS")}</p><h2>Paid vs outstanding</h2></div>
-          <button className="refresh-button" type="button" onClick={() => setPaymentDisplay((v) => v === "bar" ? "pie" : "bar")}>Switch to {paymentDisplay === "bar" ? "pie" : "bar"} chart</button>
+          <div><p className="eyebrow">{tr("PAYMENT STATUS")}</p><h2>{tr("Paid vs outstanding")}</h2></div>
+          <button className="refresh-button" type="button" onClick={() => setPaymentDisplay((v) => v === "bar" ? "pie" : "bar")}>{tr(`Switch to ${paymentDisplay === "bar" ? "pie" : "bar"} chart`)}</button>
         </div>
-        <div style={{ width: "100%", height: 280 }}>
-          <PaymentComparisonChart displayType={paymentDisplay} paid={paid} unpaid={Math.max(0, balance)} />
+        <div style={{ width: "100%", height: isSupplier ? 280 : "auto" }}>
+          {isSupplier ? <PaymentComparisonChart displayType={paymentDisplay} paid={paid} unpaid={Math.max(0, balance)} /> : <SplitAccountCharts displayType={paymentDisplay} row={sumSplit(rows)}/>}
         </div>
         {balance < 0 && <p className="muted">Net account credit: {money(-balance)}. Credits are not included in the unpaid chart.</p>}
       </section>
@@ -1613,33 +1737,33 @@ function AccountAnalytics({ kind, data, onRefresh, token }) {
       <section className="panel" style={{ marginTop: 22 }}>
         <div className="panel-heading">
           <div>
-            <p className="eyebrow">INDIVIDUAL ACCOUNT CHARTS</p>
+            <p className="eyebrow">{tr("INDIVIDUAL ACCOUNT CHARTS")}</p>
             <h2>{isSupplier ? tr("Supplier") : tr("Customer")} payment performance</h2>
             <p className="muted">Individual account charges, payments and outstanding balances.</p>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <button className="refresh-button" type="button" onClick={() => setAccountDisplay((v) => v === "bar" ? "pie" : "bar")}>Switch to {accountDisplay === "bar" ? "pie" : "bar"} charts</button>
+            <button className="refresh-button" type="button" onClick={() => setAccountDisplay((v) => v === "bar" ? "pie" : "bar")}>{tr(`Switch to ${accountDisplay === "bar" ? "pie" : "bar"} charts`)}</button>
             <span className="record-count">{filteredCharts.length} charts</span>
           </div>
         </div>
         <div className="search-box" style={{ maxWidth: 360, marginBottom: 18 }}>
           <Search size={17}/>
-          <input value={chartSearch} onChange={(e) => {setChartSearch(e.target.value);setChartPage(1);}} placeholder={`Search ${isSupplier ? "supplier" : "customer"} charts...`} />
+          <input value={chartSearch} onChange={(e) => {setChartSearch(e.target.value);setChartPage(1);}} placeholder={tr(`Search ${isSupplier ? "supplier" : "customer"} charts...`)} />
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 18 }}>
           {visibleCharts.map((r) => <div key={r.id} style={{ minWidth: 0, border: "1px solid #eee9df", borderRadius: 12, padding: "14px 10px 8px", background: "rgba(255,255,255,0.55)" }}>
             <h3 style={{ margin: "0 0 4px", fontSize: 14, color: "#3f493f" }}>{r.name}</h3>
-            <p className="muted" style={{ fontSize: 11 }}>Total charges: {money(r.charged)}</p>
-            <div style={{ width: "100%", height: 210 }}>
-              <PaymentComparisonChart displayType={accountDisplay} paid={r.paid} unpaid={Math.max(0, r.balance)}/>
+            <p className="muted" style={{ fontSize: 11 }}>{tr("Total charges")}: {money(r.charged)}</p>
+            <div style={{ width: "100%", height: isSupplier ? 210 : "auto" }}>
+              {isSupplier ? <PaymentComparisonChart displayType={accountDisplay} paid={r.paid} unpaid={Math.max(0, r.balance)}/> : <SplitAccountCharts row={r} displayType={accountDisplay}/>}
             </div>
             <div style={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap", fontSize: 11, color: "#718477" }}>
-              <span>Paid: {money(r.paid)}</span>
-              <strong>{r.balance < 0 ? `Credit: ${money(-r.balance)}` : `Unpaid: ${money(r.balance)}`}</strong>
+              <span>{tr("Paid")}: {money(r.paid)}</span>
+              <strong>{r.balance < 0 ? `${tr("Credit")}: ${money(-r.balance)}` : `${tr("Unpaid")}: ${money(r.balance)}`}</strong>
             </div>
           </div>)}
         </div>
-        {!visibleCharts.length && <div className="empty-state">No matching charts.</div>}
+        {!visibleCharts.length && <div className="empty-state">{tr("No matching charts.")}</div>}
         <PaginationControls page={safeChartPage} totalPages={chartPages} totalItems={filteredCharts.length} onPageChange={setChartPage}/>
       </section>
       {!isSupplier && <DepartmentCostBars records={costs} title="Customer charges by department"/>}
@@ -1647,11 +1771,91 @@ function AccountAnalytics({ kind, data, onRefresh, token }) {
   );
 }
 
+function PaymentReceipt({record}) {
+  if (!record.receipt) return "—";
+  try {
+    const url = new URL(record.receipt, new URL(API_URL, window.location.origin).origin + "/");
+    if (!["http:", "https:"].includes(url.protocol)) return "—";
+    return <a href={url.href} target="_blank" rel="noopener noreferrer">{tr("View receipt")} #{record.id}</a>;
+  } catch { return "—"; }
+}
+
+function customerAccountSplit(data, today) {
+  const villas = new Map(data.villas.map(v => [String(v.id), v]));
+  const map = new Map(data.customers.map(c => [String(c.id), {serviceCharges:0, servicePaid:0, invoiceCharges:0, invoicePaid:0, unmatched:0}]));
+  const account = house => { const v = villas.get(String(relationId(house))); return v && !v.is_company_property ? map.get(String(relationId(v.customer))) : null; };
+  for (const w of data.workEntries) { if (w.ownership !== "customer") continue; const a=account(w.house ?? w.villa ?? w.house_id); if(a && w.work_date <= today) a.serviceCharges += number(w.customer_charge)+number(w.additional_charges); }
+  for (const p of data.programs) { const a=account(p.house ?? p.villa ?? p.house_id); if(!a || !p.start_date || p.start_date>today) continue; let [y,m]=p.start_date.slice(0,7).split('-').map(Number); for(let n=0;n<2400;n++){const k=`${y}-${String(m).padStart(2,'0')}`; if(k>today.slice(0,7)||k>(p.end_date||today).slice(0,7))break; a.serviceCharges+=number(p.price); if(++m>12){m=1;y++;}} }
+  const eligible = new Map();
+  for (const i of data.invoices) { if (!isCustomerInvoice(i)) continue; const a=account(i.house); if(!a || i.invoice_date>today) continue; a.invoiceCharges+=number(i.amount); eligible.set(String(i.id),a); }
+  for (const p of data.customerPayments) { const a=map.get(String(relationId(p.customer))); if(!a || p.payment_date>today) continue; const id=relationId(p.invoice); if(id != null && eligible.get(String(id))===a) a.invoicePaid+=number(p.amount); else if(id == null && !String(p.reference??"").trim()) a.servicePaid+=number(p.amount); else a.unmatched+=number(p.amount); }
+  for(const a of map.values()){a.serviceBalance=a.serviceCharges-a.servicePaid; a.invoiceBalance=a.invoiceCharges-a.invoicePaid; a.outstanding=Math.max(0,a.serviceBalance)+Math.max(0,a.invoiceBalance);}
+  return map;
+}
+function sumSplit(rows){return rows.reduce((a,r)=>{for(const k of Object.keys(a))a[k]+=r[k]||0;return a;},{servicePaid:0,invoicePaid:0,serviceBalance:0,invoiceBalance:0,unmatched:0});}
+function SplitAccountCharts({row, displayType}) {
+  const values = [
+    { name: tr("Unpaid services"), amount: Math.max(0, number(row.serviceBalance)), color: "#b99b65" },
+    { name: tr("Paid services"), amount: Math.max(0, number(row.servicePaid)), color: "#718477" },
+    { name: tr("Unpaid invoices"), amount: Math.max(0, number(row.invoiceBalance)), color: "#d2b88a" },
+    { name: tr("Paid invoices"), amount: Math.max(0, number(row.invoicePaid)), color: "#466858" },
+  ];
+  return <>
+    <div style={{width:"100%", height:260}}>
+      <ResponsiveContainer width="100%" height="100%">
+        {displayType === "pie" ? <PieChart>
+          <Pie data={values} dataKey="amount" nameKey="name" innerRadius="35%" outerRadius="70%">
+            {values.map(v => <Cell key={v.name} fill={v.color}/>)}
+          </Pie>
+          <Tooltip formatter={v => money(v)}/><Legend wrapperStyle={{fontSize:10}}/>
+        </PieChart> : <BarChart data={values} margin={{top:8,right:8,left:0,bottom:48}}>
+          <CartesianGrid strokeDasharray="3 3" vertical={false}/>
+          <XAxis dataKey="name" interval={0} angle={-35} textAnchor="end" height={65} tick={{fontSize:10}}/>
+          <YAxis width={42} tick={{fontSize:10}} tickFormatter={v => new Intl.NumberFormat(uiLanguage === "el" ? "el-GR" : "en-GB", {notation:"compact"}).format(v)}/>
+          <Tooltip formatter={v => money(v)}/>
+          <Bar dataKey="amount" name={tr("Amount")} maxBarSize={55} radius={[5,5,0,0]}>
+            {values.map(v => <Cell key={v.name} fill={v.color}/>)}
+          </Bar>
+        </BarChart>}
+      </ResponsiveContainer>
+    </div>
+    <p className="muted">{tr("Service balance")}: {money(row.serviceBalance)} · {tr("Invoice balance")}: {money(row.invoiceBalance)} · {tr("Unmatched")}: {money(row.unmatched)}</p>
+  </>;
+}
+function CustomerInvoiceRegister({data}) {
+  const [query, setQuery] = useState("");
+  const [status, setStatus] = useState("All");
+  const [page, setPage] = useState(1);
+  const today = getTodayLocalDate();
+  const villas = new Map(data.villas.map(v => [String(v.id), v]));
+  const rows = data.invoices.filter(i => !i.invoice_date || i.invoice_date <= today).flatMap(i => {
+    const villa = villas.get(String(relationId(i.house)));
+    const customer = villa && relationId(villa.customer);
+    if (!isCustomerInvoice(i) || !customer) return [];
+    const payments = data.customerPayments.filter(p => String(relationId(p.invoice)) === String(i.id) && String(relationId(p.customer)) === String(customer) && (!p.payment_date || p.payment_date <= today));
+    const amount = Math.round(number(i.amount)*100);
+    const paid = payments.reduce((sum,p) => sum + Math.round(number(p.amount)*100),0);
+    return [{...i, customerName: resolveName(customer,data.customers), villaName:villa.name, supplierName:resolveName(i.supplier,data.suppliers), payments, paid:paid/100, balance:Math.max(0,amount-paid)/100, excess:Math.max(0,paid-amount)/100, status:paid>=amount?"Paid":"Unpaid"}];
+  });
+  const filtered = rows.filter(r => (status === "All" || r.status === status || (status === "Unpaid" && r.status === "Ambiguous reference")) && [r.id,r.invoice_number,r.customerName,r.villaName,r.supplierName,r.description].join(" ").toLowerCase().includes(query.toLowerCase()));
+  const pages = Math.max(1,Math.ceil(filtered.length/10));
+  const current = Math.min(page,pages);
+  return <section className="panel table-panel" style={{marginTop:20}}>
+    <div className="panel-heading"><div><h2>{tr("Customer invoice payment register")}</h2><p className="muted">{tr("Only payments linked to an invoice are allocated. General payments remain at account level.")}</p></div></div>
+    <div className="stats-grid"><StatCard label={tr("Invoiced")} value={money(filtered.reduce((s,r)=>s+number(r.amount),0))} icon={FileText}/><StatCard label={tr("Allocated payments")} value={money(filtered.reduce((s,r)=>s+r.paid,0))} icon={Wallet}/><StatCard label="Outstanding" value={money(filtered.reduce((s,r)=>s+r.balance,0))} icon={CreditCard}/></div>
+    <div className="search-box"><Search size={17}/><input value={query} onChange={e=>{setQuery(e.target.value);setPage(1);}} placeholder={tr("Search invoice number, customer, villa or supplier")}/></div>
+    <select value={status} onChange={e=>{setStatus(e.target.value);setPage(1);}}>{["All","Paid","Unpaid"].map(x=><option key={x} value={x}>{tr(x)}</option>)}</select>
+    <div className="table-scroll"><table><thead><tr>{["ID","Invoice","Date","Customer","Villa","Supplier","Description","Amount","Paid","Status","Payments / receipts"].map(x=><th key={x}>{tr(x)}</th>)}</tr></thead><tbody>{filtered.slice((current-1)*10,current*10).map(r=><tr key={r.id}><td>{r.id}</td><td><InvoiceLink record={r}/></td><td>{dateLabel(r.invoice_date)}</td><td>{r.customerName}</td><td>{r.villaName}</td><td>{r.supplierName}</td><td>{r.description}</td><td>{money(r.amount)}</td><td>{money(r.paid)}</td><td>{tr(r.status)}</td><td>{r.payments.length?r.payments.map(p=><div key={p.id}>{dateLabel(p.payment_date)} · {money(p.amount)} · <PaymentReceipt record={p}/></div>):"—"}</td></tr>)}</tbody></table></div>
+    {!filtered.length && <div className="empty-state">{tr("No matching invoices.")}</div>}
+    <PaginationControls page={current} totalPages={pages} totalItems={filtered.length} onPageChange={setPage}/>
+  </section>;
+}
+
 function PaymentsAnalytics({ kind, data, onRefresh }) {
   const isSupplier = kind === "supplier";
   const payments = isSupplier ? data.supplierPayments : data.customerPayments;
   const parties = isSupplier ? data.suppliers : data.customers;
-  const title = isSupplier ? "Supplier Payments" : "Customer Payments";
+  const title = isSupplier ? "Company Invoice Payments" : "Customer Payments & Invoices";
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const [chartSearch, setChartSearch] = useState("");
@@ -1673,6 +1877,7 @@ function PaymentsAnalytics({ kind, data, onRefresh }) {
   const pageRows = visiblePayments.slice((safePage - 1) * 10, safePage * 10);
   const totals = useMemo(() => {
     const map = new Map(parties.map((p) => [String(p.id), { id: p.id, name: p.name || `#${p.id}`, paid: 0, charged: 0 }]));
+    if (!isSupplier) { const split=customerAccountSplit(data,today); return [...map.values()].map(r=>{const a=split.get(String(r.id));return {...r,...a,paid:a.servicePaid+a.invoicePaid,charged:a.serviceCharges+a.invoiceCharges,balance:a.serviceBalance+a.invoiceBalance,unpaid:a.outstanding};}); }
     enriched.forEach((payment) => {
       if (payment.payment_date && payment.payment_date > today) return;
       const id = relationId(isSupplier ? payment.supplier : payment.customer);
@@ -1681,6 +1886,7 @@ function PaymentsAnalytics({ kind, data, onRefresh }) {
     });
     if (isSupplier) {
       data.invoices.forEach((invoice) => {
+        if (!isCompanyInvoice(invoice, data.villas)) return;
         if (invoice.invoice_date && invoice.invoice_date > today) return;
         const party = map.get(String(relationId(invoice.supplier)));
         if (party) party.charged += number(invoice.amount);
@@ -1736,49 +1942,51 @@ function PaymentsAnalytics({ kind, data, onRefresh }) {
       <StatCard label={tr("Outstanding")} value={money(totalUnpaid)} detail={tr("Unpaid across accounts")} icon={FileText}/>
     </div>
     <section className="panel" style={{ marginTop: 20 }}>
-      <div className="panel-heading"><div><p className="eyebrow">{tr("PAYMENT STATUS")}</p><h2>Paid vs unpaid</h2></div>
-        <button className="refresh-button" type="button" onClick={() => setTotalDisplay(v => v === "bar" ? "pie" : "bar")}>Switch to {totalDisplay === "bar" ? "pie" : "bar"} chart</button>
+      <div className="panel-heading"><div><p className="eyebrow">{tr("PAYMENT STATUS")}</p><h2>{tr("Paid vs unpaid")}</h2></div>
+        <button className="refresh-button" type="button" onClick={() => setTotalDisplay(v => v === "bar" ? "pie" : "bar")}>{tr(`Switch to ${totalDisplay === "bar" ? "pie" : "bar"} chart`)}</button>
       </div>
-      <div style={{ height: 280, width: "100%" }}><PaymentComparisonChart displayType={totalDisplay} paid={totalPaid} unpaid={totalUnpaid}/></div>
+      <div style={{ height: isSupplier ? 280 : "auto", width: "100%" }}>{isSupplier ? <PaymentComparisonChart displayType={totalDisplay} paid={totalPaid} unpaid={totalUnpaid}/> : <SplitAccountCharts row={sumSplit(totals)} displayType={totalDisplay}/>} </div>
     </section>
     <section className="panel table-panel" style={{ marginTop: 20 }}>
-      <div className="panel-heading"><div><p className="eyebrow">PAYMENT RECORDS</p><h2>{title} table</h2></div><span className="record-count">{visiblePayments.length} records</span></div>
+      <div className="panel-heading"><div><p className="eyebrow">{tr("PAYMENT RECORDS")}</p><h2>{tr(`${title} table`)}</h2></div><span className="record-count">{visiblePayments.length} records</span></div>
       <div className="search-box" style={{ maxWidth: 360, marginBottom: 16 }}><Search size={17}/>
-        <input value={search} onChange={e => {setSearch(e.target.value);setPage(1);}} placeholder="Search payments, names, references..."/>
+        <input value={search} onChange={e => {setSearch(e.target.value);setPage(1);}} placeholder={tr("Search payments, names, references...")}/>
       </div>
-      <div className="table-scroll"><table><thead><tr><th>{tr("Date")}</th><th>{isSupplier ? tr("Supplier") : tr("Customer")}</th><th>{tr("Amount")}</th><th>{tr("Reference")}</th><th>{tr("Notes")}</th></tr></thead>
-        <tbody>{pageRows.map((r) => <tr key={r.id}><td>{dateLabel(r.payment_date)}</td><td>{r.partyName}</td><td>{money(r.amount)}</td><td>{r.reference || "—"}</td><td>{r.notes || "—"}</td></tr>)}</tbody>
+      <div className="table-scroll"><table><thead><tr><th>{tr("Date")}</th><th>{isSupplier ? tr("Supplier") : tr("Customer")}</th><th>{tr("Amount")}</th><th>{tr("Reference")}</th>{!isSupplier && <th>{tr("Payment type")}</th>}<th>{tr("Notes")}</th>{!isSupplier && <th>{tr("Receipt")}</th>}</tr></thead>
+        <tbody>{pageRows.map((r) => <tr key={r.id}><td>{dateLabel(r.payment_date)}</td><td>{r.partyName}</td><td>{money(r.amount)}</td><td>{r.invoice_number || r.reference || "—"}</td>{!isSupplier && <td>{r.invoice != null ? tr("Invoice reference") : String(r.reference??"").trim() ? tr("Unmatched") : tr("Services")}</td>}<td>{r.notes || "—"}</td>{!isSupplier && <td><PaymentReceipt record={r}/></td>}</tr>)}</tbody>
       </table></div>
-      {!pageRows.length && <div className="empty-state">No matching payments.</div>}
+      {!pageRows.length && <div className="empty-state">{tr("No matching payments.")}</div>}
       <PaginationControls page={safePage} totalPages={paymentPages} totalItems={visiblePayments.length} onPageChange={setPage}/>
     </section>
+    {!isSupplier && <CustomerInvoiceRegister data={data}/>}
     <section className="panel" style={{ marginTop: 22 }}>
-      <div className="panel-heading"><div><p className="eyebrow">INDIVIDUAL ACCOUNT CHARTS</p><h2>Payment performance by {isSupplier ? "supplier" : "customer"}</h2>
-        <p className="muted">Account-level payments and outstanding balances, sorted by total paid.</p></div>
-        <button className="refresh-button" type="button" onClick={() => setChartDisplay(v => v === "bar" ? "pie" : "bar")}>Switch to {chartDisplay === "bar" ? "pie" : "bar"} charts</button>
+      <div className="panel-heading"><div><p className="eyebrow">{tr("INDIVIDUAL ACCOUNT CHARTS")}</p><h2>{tr(isSupplier ? "Payment performance by supplier" : "Payment performance by customer")}</h2>
+        <p className="muted">{tr("Account-level payments and outstanding balances, sorted by total paid.")}</p></div>
+        <button className="refresh-button" type="button" onClick={() => setChartDisplay(v => v === "bar" ? "pie" : "bar")}>{tr(`Switch to ${chartDisplay === "bar" ? "pie" : "bar"} charts`)}</button>
       </div>
       <div className="search-box" style={{ maxWidth: 360, marginBottom: 18 }}><Search size={17}/>
-        <input value={chartSearch} onChange={e => {setChartSearch(e.target.value);setChartPage(1);}} placeholder={`Search ${isSupplier ? "supplier" : "customer"} charts...`}/>
+        <input value={chartSearch} onChange={e => {setChartSearch(e.target.value);setChartPage(1);}} placeholder={tr(`Search ${isSupplier ? "supplier" : "customer"} charts...`)}/>
       </div>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 18 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 340px), 1fr))", gap: 18 }}>
         {chartRows.map((r) => <div key={r.id} style={{ minWidth: 0, border: "1px solid #eee9df", borderRadius: 12, padding: 14 }}>
           <h3 style={{ fontSize: 14, margin: "0 0 5px" }}>{r.name}</h3>
-          <p className="muted" style={{ fontSize: 11 }}>Paid: {money(r.paid)}</p>
-          <div style={{ height: 205 }}><PaymentComparisonChart displayType={chartDisplay} paid={r.paid} unpaid={r.unpaid}/></div>
-          <p className="muted" style={{ fontSize: 11 }}>Charged: {money(r.charged)} · {r.balance < 0 ? `Credit: ${money(-r.balance)}` : `Unpaid: ${money(r.unpaid)}`}</p>
+          <p className="muted" style={{ fontSize: 11 }}>{tr("Paid")}: {money(r.paid)}</p>
+          <div style={{ height: isSupplier ? 205 : "auto" }}>{isSupplier ? <PaymentComparisonChart displayType={chartDisplay} paid={r.paid} unpaid={r.unpaid}/> : <SplitAccountCharts row={r} displayType={chartDisplay}/>} </div>
+          <p className="muted" style={{ fontSize: 11 }}>{tr("Charged")}: {money(r.charged)} · {r.balance < 0 ? `${tr("Credit")}: ${money(-r.balance)}` : `${tr("Unpaid")}: ${money(r.unpaid)}`}</p>
         </div>)}
       </div>
-      {!chartRows.length && <div className="empty-state">No matching charts.</div>}
+      {!chartRows.length && <div className="empty-state">{tr("No matching charts.")}</div>}
       <PaginationControls page={safeChartPage} totalPages={chartPages} totalItems={filteredCharts.length} onPageChange={setChartPage}/>
-      <p className="muted" style={{ marginTop: 12 }}>Payments are allocated at account level, not to individual invoices or departments. Customer invoices attached to villas are treated as reimbursable; programs without start dates are excluded from historical totals.</p>
+      <p className="muted" style={{ marginTop: 12 }}>Account charts include all payments; the customer invoice register separately shows explicitly referenced payments. Customer invoices attached to villas are treated as reimbursable; programs without start dates are excluded from historical totals.</p>
     </section>
   </>;
 }
 
 
 // Invoices have no invoice-level settlement link. Paid/unpaid is supplier-account level.
-function InvoiceAnalytics({ data, onRefresh }) {
+function InvoiceAnalytics({ data, onRefresh, paymentsReady, ownership }) {
   const [search, setSearch] = useState("");
+  const [customerFilter, setCustomerFilter] = useState("");
   const [page, setPage] = useState(1);
   const [chartSearch, setChartSearch] = useState("");
   const [chartPage, setChartPage] = useState(1);
@@ -1786,17 +1994,20 @@ function InvoiceAnalytics({ data, onRefresh }) {
   const [individualDisplay, setIndividualDisplay] = useState("bar");
   const today = getTodayLocalDate();
 
-  const invoices = useMemo(() => data.invoices.map((r) => ({
+  const customerByVilla = useMemo(() => new Map(data.villas.map(v => [String(v.id), v.is_company_property ? null : relationId(v.customer)])), [data.villas]);
+  const customerOptions = [...data.customers].sort((a,b) => resolveName(a.id,data.customers).localeCompare(resolveName(b.id,data.customers)));
+  const invoices = useMemo(() => data.invoices.filter(r => !ownership || r.ownership === ownership).map((r) => ({
     ...r,
     supplierId: relationId(r.supplier),
     supplierName: resolveName(r.supplier, data.suppliers, r.supplier_name),
     departmentName: departmentName(r.department, data.departments),
     villaName: getVillaName(r, data.villas),
-    searchText: [r.invoice_number, r.description, r.invoice_date,
+    customerId: customerByVilla.get(String(relationId(r.house))),
+    searchText: [r.id, r.invoice_number, r.description, r.invoice_date, resolveName(customerByVilla.get(String(relationId(r.house))), data.customers),
       resolveName(r.supplier, data.suppliers, r.supplier_name),
       departmentName(r.department, data.departments), getVillaName(r, data.villas)]
       .join(" ").toLowerCase(),
-  })), [data.invoices, data.suppliers, data.departments, data.villas]);
+  })), [data.invoices, data.suppliers, data.departments, data.villas, data.customers, customerByVilla, ownership]);
 
   const { accounts, paid, invoiced, outstanding, credit } = useMemo(() => {
     const map = new Map(data.suppliers.map((supplier) => [String(supplier.id), {
@@ -1804,6 +2015,7 @@ function InvoiceAnalytics({ data, onRefresh }) {
       invoiced: 0, paid: 0, invoiceCount: 0,
     }]));
     invoices.forEach((invoice) => {
+      if (!isCompanyInvoice(invoice, data.villas)) return;
       if (invoice.invoice_date && invoice.invoice_date > today) return;
       const account = map.get(String(invoice.supplierId));
       if (!account) return;
@@ -1826,9 +2038,21 @@ function InvoiceAnalytics({ data, onRefresh }) {
       outstanding: accounts.reduce((sum, account) => sum + Math.max(0, account.balance), 0),
       credit: accounts.reduce((sum, account) => sum + Math.max(0, -account.balance), 0),
     };
-  }, [data.suppliers, data.supplierPayments, invoices, today]);
+  }, [data.suppliers, data.supplierPayments, invoices, data.villas, today]);
 
-  const filtered = invoices.filter((r) => r.searchText.includes(search.trim().toLowerCase()));
+  const paymentDetails = useMemo(() => {
+    return new Map(invoices.map(r => {
+      if (!paymentsReady) return [String(r.id), {status: "Unavailable", payments: []}];
+      const records = isCompanyInvoice(r) ? data.supplierPayments : data.customerPayments;
+      const payments = records.filter(p => String(relationId(p.invoice)) === String(r.id) && (!p.payment_date || p.payment_date <= today));
+      const paid = payments.reduce((sum,p) => sum + Math.round(number(p.amount)*100), 0);
+      const amount = Math.round(number(r.amount)*100);
+      const status = r.invoice_date && r.invoice_date > today ? "Not yet due" : paid >= amount ? "Paid" : paid > 0 ? "Partially paid" : "Unpaid";
+      return [String(r.id), {status, payments, paid: paid/100, balance: Math.max(0,amount-paid)/100}];
+    }));
+  }, [invoices, data.villas, data.customerPayments, data.supplierPayments, today, paymentsReady]);
+
+  const filtered = invoices.filter((r) => (!customerFilter || String(r.customerId) === customerFilter) && r.searchText.includes(search.trim().toLowerCase()));
   const pages = Math.max(1, Math.ceil(filtered.length / 10));
   const safePage = Math.min(page, pages);
   const visible = filtered.slice((safePage - 1) * 10, safePage * 10);
@@ -1840,9 +2064,9 @@ function InvoiceAnalytics({ data, onRefresh }) {
 
   return <>
     <div className="welcome-row">
-      <div><p className="eyebrow">{tr("SUPPLIER INVOICE ANALYTICS")}</p><h1>{tr("Invoices")}</h1>
+      <div><p className="eyebrow">{tr("SUPPLIER INVOICE ANALYTICS")}</p><h1>{tr(ownership === "company" ? "Company Invoices" : ownership === "customer" ? "Customer Invoices" : "All Invoices")}</h1>
         <p className="muted">{tr("Invoice totals, departmental costs, supplier balances and individual charts.")}</p></div>
-      <AddRecord page={"invoices"}/>
+      <AddRecord page={ownership === "company" ? "companyInvoices" : "invoices"}/>
     </div>
     <div className="stats-grid">
       <StatCard label={tr("Total invoiced")} value={money(invoices.reduce((sum, r) => sum + number(r.amount), 0))} detail={tr("All invoice records")} icon={FileText}/>
@@ -1855,16 +2079,22 @@ function InvoiceAnalytics({ data, onRefresh }) {
         <button className="refresh-button" type="button" onClick={() => setSummaryDisplay(v => v === "bar" ? "pie" : "bar")}>Switch to {summaryDisplay === "bar" ? "pie" : "bar"} chart</button>
       </div>
       <div style={{ width: "100%", height: 280 }}><PaymentComparisonChart displayType={summaryDisplay} paid={paid} unpaid={outstanding}/></div>
-      <p className="muted">Payments are recorded per supplier, not per invoice. {credit > 0 ? `Supplier credits: ${money(credit)}. ` : ""}The chart shows account-level payments and outstanding amounts, not invoice settlement status.</p>
+      <p className="muted">Linked payments settle invoices; general payments remain at supplier account level. {credit > 0 ? `Supplier credits: ${money(credit)}. ` : ""}The chart shows account-level payments and outstanding amounts, not invoice settlement status.</p>
     </section>
     <DepartmentCostBars records={costRecords} title="Invoice costs by department"/>
     <section className="panel table-panel" style={{ marginTop: 20 }}>
-      <div className="panel-heading"><div><p className="eyebrow">INVOICE RECORDS</p><h2>All invoices</h2></div><span className="record-count">{filtered.length} records</span></div>
-      <div className="search-box" style={{ maxWidth: 360, marginBottom: 16 }}><Search size={17}/>
-        <input value={search} onChange={e => { setSearch(e.target.value); setPage(1); }} placeholder="Search invoices, suppliers, departments, villas..."/>
+      <div className="panel-heading"><div><p className="eyebrow">INVOICE RECORDS</p><h2>{tr(ownership === "company" ? "Company Invoices" : ownership === "customer" ? "Customer Invoices" : "All Invoices")}</h2><p className="muted">Payment status is based on linked invoice payments.</p></div><span className="record-count">{filtered.length} records</span></div>
+      <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", marginBottom: 16 }}>
+        <div className="search-box" style={{ maxWidth: 360 }}><Search size={17}/>
+          <input value={search} onChange={e => { setSearch(e.target.value); setPage(1); }} placeholder={tr("Search invoices, customers, suppliers, villas...")}/>
+        </div>
+        <label>{tr("Customer")} <select value={customerFilter} onChange={e => { setCustomerFilter(e.target.value); setPage(1); }}>
+          <option value="">{tr("All customers")}</option>
+          {customerOptions.map(c => <option key={c.id} value={String(c.id)}>{resolveName(c.id,data.customers)}</option>)}
+        </select></label>
       </div>
-      <div className="table-scroll"><table><thead><tr><th>{tr("Invoice")}</th><th>{tr("Date")}</th><th>{tr("Supplier")}</th><th>{tr("Department")}</th><th>{tr("Villa")}</th><th>{tr("Amount")}</th></tr></thead>
-        <tbody>{visible.map((r, i) => <tr key={r.id ?? i}><td><InvoiceLink record={r}/></td><td>{dateLabel(r.invoice_date)}</td><td>{r.supplierName}</td><td>{r.departmentName}</td><td>{r.villaName}</td><td>{money(r.amount)}</td></tr>)}</tbody>
+      <div className="table-scroll"><table><thead><tr><th>{tr("Invoice")}</th><th>{tr("Ownership")}</th><th>{tr("Date")}</th><th>{tr("Supplier")}</th><th>{tr("Department")}</th><th>{tr("Villa")}</th><th>{tr("Amount")}</th><th>{tr("Payment status")}</th><th>{tr("Receipt")}</th></tr></thead>
+        <tbody>{visible.map((r, i) => <tr key={r.id ?? i}><td><InvoiceLink record={r}/></td><td>{tr(r.ownership === "company" ? "Company" : "Customer")}</td><td>{dateLabel(r.invoice_date)}</td><td>{r.supplierName}</td><td>{r.departmentName}</td><td>{r.villaName}</td><td>{money(r.amount)}</td><td>{tr(paymentDetails.get(String(r.id))?.status || "Unavailable")}</td><td>{(paymentDetails.get(String(r.id))?.payments || []).filter(p=>p.receipt).length ? paymentDetails.get(String(r.id)).payments.filter(p=>p.receipt).map(p=><div key={p.id}><PaymentReceipt record={p}/></div>) : "—"}</td></tr>)}</tbody>
       </table></div>
       {!visible.length && <div className="empty-state">No matching invoices.</div>}
       <PaginationControls page={safePage} totalPages={pages} totalItems={filtered.length} onPageChange={setPage}/>
@@ -2845,6 +3075,7 @@ export default function App() {
     });
 
     const unauthorized = failures.some((item) =>
+      !(["companyGas", "ika"].includes(item.key) && /403/.test(item.message)) &&
       /401|403|token|authentication|credentials/i.test(item.message)
     );
 
@@ -2900,14 +3131,24 @@ export default function App() {
       0
     );
 
+    const fuelCosts = data.companyGas.reduce(
+      (sum, item) => sum + number(item.price_total),
+      0
+    );
+    const ikaCosts = data.ika.reduce((sum, item) => sum + number(item.accrued_cost), 0);
+    const otherCosts = data.departmentCosts.reduce((sum, item) => sum + number(item.amount), 0);
+    const companyCosts = employeeCosts + invoiceCosts + fuelCosts + ikaCosts + otherCosts;
+
     return {
       workRevenue,
       programRevenue,
       revenue: workRevenue + programRevenue,
       employeeCosts,
-      grossProfit: workRevenue + programRevenue - employeeCosts - invoiceCosts,
-      costs: employeeCosts + invoiceCosts,
-      margin: workRevenue + programRevenue - employeeCosts - invoiceCosts,
+      fuelCosts,
+      ikaCosts,
+      grossProfit: workRevenue + programRevenue - companyCosts,
+      costs: companyCosts,
+      margin: workRevenue + programRevenue - companyCosts,
     };
   }, [data]);
 
@@ -3027,8 +3268,8 @@ export default function App() {
   );
 
   const employeePerformanceData = useMemo(
-    () => buildEmployeePerformance(data.employees, data.workEntries, data.departments),
-    [data.employees, data.workEntries, data.departments]
+    () => buildEmployeePerformance(data.employees, data.workEntries, data.departments, data.ika, data.programs, data.services, data.villas),
+    [data.employees, data.workEntries, data.departments, data.ika, data.programs, data.services, data.villas]
   );
 
   const filteredWork = useMemo(() => {
@@ -3107,7 +3348,7 @@ export default function App() {
     },
 
     customerPayments: {
-      title: "Customer Payments",
+      title: "Customer Payments & Invoices",
       subtitle: "Read-only payments recorded in Django Admin",
       rows: data.customerPayments,
       columns: [
@@ -3130,7 +3371,7 @@ export default function App() {
       ],
     },
     supplierPayments: {
-      title: "Supplier Payments",
+      title: "Company Invoice Payments",
       subtitle: "Read-only supplier payments recorded in Django Admin",
       rows: data.supplierPayments,
       columns: [
@@ -3188,6 +3429,7 @@ export default function App() {
       rows: filteredWork,
       columns: [
         { label: "Date", render: (r) => dateLabel(r.work_date) },
+        { label: "Ownership", render: (r) => tr(r.ownership === "company" ? "Company" : "Customer") },
         { label: "Villa", render: (r) => getVillaName(r, data.villas) },
         { label: "Employee", render: (r) => getEmployeeName(r) },
         { label: "Department", render: (r) => r.department_name || "—" },
@@ -3214,7 +3456,7 @@ export default function App() {
     },
 
     invoices: {
-      title: "Invoices",
+      title: "All Invoices",
       subtitle: "Supplier invoices from your database",
       rows: data.invoices,
       columns: [
@@ -3274,8 +3516,8 @@ export default function App() {
         <div className="nav-caption">WORKSPACE</div>
 
         <nav className="side-nav">
-          {navigation.map(({ id, label, icon: Icon }) => (
-            <button
+          {navigation.map(({ id, label, icon: Icon, group }) => (
+            <div key={id}>{group && <div className="nav-caption">{tr(group)}</div>}<button
               key={id}
               className={`nav-item ${activePage === id ? "active" : ""}`}
               onClick={() => {
@@ -3285,7 +3527,7 @@ export default function App() {
             >
               <Icon size={18} strokeWidth={1.7} />
               <span>{tr(label)}</span>
-            </button>
+            </button></div>
           ))}
         </nav>
 
@@ -3387,8 +3629,10 @@ export default function App() {
               token={token}
               villas={data.villas}
             />
-          ) : activePage === "invoices" ? (
-            <InvoiceAnalytics data={data} onRefresh={loadDashboard} />
+          ) : activePage === "customerInvoices" ? (
+            <><div className="welcome-row"><h1>{tr("Customer Invoices")}</h1><AddRecord page="customerInvoices"/></div><CustomerInvoiceRegister data={data}/></>
+          ) : activePage === "invoices" || activePage === "companyInvoices" ? (
+            <InvoiceAnalytics key={activePage} ownership={activePage === "companyInvoices" ? "company" : undefined} data={data} onRefresh={loadDashboard} paymentsReady={!loading && !endpointErrors.some(e => ["customerPayments", "supplierPayments", "villas", "invoices"].includes(e.key))} />
           ) : activePage === "customerPayments" || activePage === "supplierPayments" ? (
             <PaymentsAnalytics
               kind={activePage === "supplierPayments" ? "supplier" : "customer"}
@@ -3467,7 +3711,9 @@ export default function App() {
                 <StatCard
                   label="Recorded Costs"
                   value={money(totals.costs)}
-                  detail="Employee work costs + company invoices"
+                  detail={endpointErrors.some(item => ["companyGas", "ika"].includes(item.key))
+                    ? "Fuel or IKA costs unavailable — total incomplete"
+                    : "Employee work costs + company invoices + fuel + IKA + department costs"}
                   icon={FileText}
                 />
 
@@ -3811,6 +4057,7 @@ export default function App() {
                 )}
                 columns={[
                   { label: "Date", render: (r) => dateLabel(r.work_date) },
+        { label: "Ownership", render: (r) => tr(r.ownership === "company" ? "Company" : "Customer") },
                   { label: "Villa", render: (r) => getVillaName(r, data.villas) },
                   { label: "Employee", render: getEmployeeName },
                   { label: "Service", render: (r) => getServiceName(r, data.services) },
@@ -4230,7 +4477,7 @@ export default function App() {
             <PerformancePage
               eyebrow={tr("EMPLOYEE PERFORMANCE")}
               title="Employees"
-              subtitle="Review each employee's salary arrangement, customer revenue generated and gross earnings."
+              subtitle={endpointErrors.some((error) => ["ika", "programs", "services", "departments", "villas", "workEntries"].includes(error.key)) ? tr("Employee financial data incomplete") : "Review each employee's salary arrangement, customer revenue generated and gross earnings."}
               tableEyebrow={tr("EMPLOYEE EARNINGS SUMMARY")}
               tableTitle={tr("Salary, revenue earned & gross earned")}
               items={employeePerformanceData.map((item) => ({ ...item, name: item.name }))}
@@ -4239,13 +4486,25 @@ export default function App() {
                 { label: "Department", key: "department" },
                 { label: "Salary type", key: "salaryType" },
                 { label: "Salary", key: "salaryDisplay" },
-                { label: "Revenue earned", render: (item) => money(item.revenue) },
-                { label: "Gross earned", render: (item) => money(item.grossProfit) },
+                { label: "IKA / month", render: (item) => {
+                  if (endpointErrors.some((error) => error.key === "ika")) return "—";
+                  const today = getTodayLocalDate();
+                  const monthlyCost = data.ika.filter((record) =>
+                    String(relationId(record.employee)) === String(item.id) &&
+                    record.start_date && record.start_date <= today &&
+                    (!record.end_date || record.end_date >= today)
+                  ).reduce((sum, record) => sum + number(record.monthly_cost), 0);
+                  return money(monthlyCost);
+                } },
+                { label: "Direct work revenue", render: (item) => money(item.revenue - item.subscriptionRevenue) },
+                { label: "Subscription revenue", render: (item) => endpointErrors.some(error => ["programs", "services", "departments", "villas", "workEntries"].includes(error.key)) ? "—" : money(item.subscriptionRevenue) },
+                { label: "Revenue earned", render: (item) => endpointErrors.some(error => ["programs", "services", "departments", "villas", "workEntries"].includes(error.key)) ? "—" : money(item.revenue) },
+                { label: "Gross earned", render: (item) => endpointErrors.some((error) => ["ika", "programs", "services", "departments", "villas", "workEntries"].includes(error.key)) ? "—" : money(item.grossProfit) },
               ]}
               searchPlaceholder={tr("Search employees, departments or salary type...")}
               chartSearchPlaceholder={tr("Search employee charts...")}
               revenueLabel={tr("Revenue earned")}
-              expenseLabel={tr("Recorded salary cost")}
+              expenseLabel={tr("Salary cost + IKA")}
               grossLabel={tr("Gross earned")}
               onRefresh={loadDashboard}
             />
