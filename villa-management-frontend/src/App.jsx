@@ -16,6 +16,7 @@ const API_URL = (import.meta.env.VITE_API_URL || "http://127.0.0.1:8000/api").re
 
 let uiLanguage = typeof localStorage !== "undefined" && localStorage.getItem("pk_language") === "el" ? "el" : "en";
 const greek = {
+  "This Month": "Αυτός ο μήνας", "This Year": "Αυτό το έτος", "Financial period": "Οικονομική περίοδος",
   "COMPANY": "ΕΤΑΙΡΕΙΑ", "CUSTOMERS": "ΠΕΛΑΤΕΣ", "OPERATIONS": "ΛΕΙΤΟΥΡΓΙΕΣ",
   "Company": "Εταιρεία", "Ownership": "Ιδιοκτησία", "Company Invoices": "Τιμολόγια εταιρείας", "Customer Invoices": "Τιμολόγια πελατών", "Payment status": "Κατάσταση πληρωμής",
   "Company Invoice Payments": "Πληρωμές τιμολογίων εταιρείας",
@@ -1083,7 +1084,20 @@ function isCompanyInvoice(invoice) { return invoice.ownership === "company"; }
 function isCustomerInvoice(invoice) { return invoice.ownership === "customer"; }
 
 // Builds total income, outcome and net result for every villa.
-function buildVillaChart(villas, workEntries, programs, invoices) {
+// Accrued monthly program fees through today, including ended programs.
+function accruedProgramRevenue(program, villa, today = getTodayLocalDate(), periodStart = "0001-01-01") {
+  if (!villa || villa.is_company_property) return 0;
+  const originalStart = program.start_date || villa.created_at?.slice(0, 10);
+  if (!originalStart) return 0;
+  const start = originalStart > periodStart ? originalStart : periodStart;
+  if (!start || start > today || (program.end_date && program.end_date < start)) return 0;
+  const end = program.end_date && program.end_date < today ? program.end_date : today;
+  const [sy, sm] = start.slice(0, 7).split("-").map(Number);
+  const [ey, em] = end.slice(0, 7).split("-").map(Number);
+  return number(program.price) * Math.max(0, (ey - sy) * 12 + em - sm + 1);
+}
+
+function buildVillaChart(villas, workEntries, programs, invoices, periodStart = "0001-01-01") {
   const today = getTodayLocalDate();
 
   const totals = new Map(
@@ -1124,17 +1138,12 @@ function buildVillaChart(villas, workEntries, programs, invoices) {
 
   // Add currently active program revenue.
   programs.forEach((program) => {
-    const started = !program.start_date || program.start_date <= today;
-    const notEnded = !program.end_date || program.end_date >= today;
-
-    if (!started || !notEnded) return;
-
     const houseId = getHouseId(program);
     const current = totals.get(String(houseId));
 
     if (!current) return;
 
-    current.income += number(program.price);
+    current.income += accruedProgramRevenue(program, villas.find(v => String(v.id) === String(houseId)), today, periodStart);
   });
 
   // Add invoices assigned to each villa.
@@ -2901,6 +2910,13 @@ export default function App() {
 
   // Controls which chart is displayed.
   const [chartView, setChartView] = useState("monthly");
+  const [overviewPeriod, setOverviewPeriod] = useState("month");
+  const overviewToday = getTodayLocalDate();
+  const overviewStart = overviewPeriod === "month" ? `${overviewToday.slice(0, 7)}-01` : `${overviewToday.slice(0, 4)}-01`;
+  const overviewData = useMemo(() => {
+    const within = d => Boolean(d && d >= overviewStart && d <= overviewToday);
+    return { ...data, workEntries: data.workEntries.filter(r => within(r.work_date)), invoices: data.invoices.filter(r => within(r.invoice_date)), companyGas: data.companyGas.filter(r => within(r.date)), departmentCosts: data.departmentCosts.filter(r => within(r.cost_date)) };
+  }, [data, overviewStart, overviewToday]);
 
   // Independent search and pagination for the Villas page.
   const [villaTableSearch, setVillaTableSearch] = useState("");
@@ -3100,43 +3116,32 @@ export default function App() {
 
   // Financial calculations.
   const totals = useMemo(() => {
-    const workRevenue = data.workEntries.reduce(
+    const workRevenue = overviewData.workEntries.reduce(
       (sum, item) => sum + number(item.customer_charge),
       0
     );
 
-    // Count only programs active on the current local date.
-    // The Django API field is "price", not "monthly_price".
     const today = getTodayLocalDate();
+    const villaMap = new Map(overviewData.villas.map(v => [String(v.id), v]));
+    const programRevenue = overviewData.programs.reduce((sum, item) =>
+      sum + accruedProgramRevenue(item, villaMap.get(String(relationId(item.house))), today, overviewStart), 0);
 
-    const activePrograms = data.programs.filter((item) => {
-      const started = !item.start_date || item.start_date <= today;
-      const notEnded = !item.end_date || item.end_date >= today;
-
-      return started && notEnded;
-    });
-
-    const programRevenue = activePrograms.reduce(
-      (sum, item) => sum + number(item.price),
-      0
-    );
-
-    const employeeCosts = data.workEntries.reduce(
+    const employeeCosts = overviewData.workEntries.reduce(
       (sum, item) => sum + number(item.employee_cost),
       0
     );
 
-    const invoiceCosts = data.invoices.filter((invoice) => isCompanyInvoice(invoice, data.villas)).reduce(
+    const invoiceCosts = overviewData.invoices.filter((invoice) => isCompanyInvoice(invoice, overviewData.villas)).reduce(
       (sum, item) => sum + number(item.amount),
       0
     );
 
-    const fuelCosts = data.companyGas.reduce(
+    const fuelCosts = overviewData.companyGas.reduce(
       (sum, item) => sum + number(item.price_total),
       0
     );
-    const ikaCosts = data.ika.reduce((sum, item) => sum + number(item.accrued_cost), 0);
-    const otherCosts = data.departmentCosts.reduce((sum, item) => sum + number(item.amount), 0);
+    const ikaCosts = overviewData.ika.reduce((sum, item) => sum + accruedProgramRevenue({price: item.monthly_cost, start_date: item.start_date, end_date: item.end_date}, {}, today, overviewStart), 0);
+    const otherCosts = overviewData.departmentCosts.reduce((sum, item) => sum + number(item.amount), 0);
     const companyCosts = employeeCosts + invoiceCosts + fuelCosts + ikaCosts + otherCosts;
 
     return {
@@ -3150,16 +3155,16 @@ export default function App() {
       costs: companyCosts,
       margin: workRevenue + programRevenue - companyCosts,
     };
-  }, [data]);
+  }, [overviewData, overviewStart]);
 
   const departmentChartData = useMemo(
     () =>
       buildDepartmentChart(
-        data.workEntries,
-        data.services,
-        data.departments
+        overviewData.workEntries,
+        overviewData.services,
+        overviewData.departments
       ),
-    [data.workEntries, data.services, data.departments]
+    [overviewData.workEntries, overviewData.services, overviewData.departments]
   );
 
   // Villa financial chart data.
@@ -3179,6 +3184,8 @@ export default function App() {
     const internalIds = new Set(data.villas.filter((villa) => villa.is_company_property === true).map((villa) => String(villa.id)));
     return villaPerformanceData.filter((villa) => !internalIds.has(String(villa.id)));
   }, [villaPerformanceData, data.villas]);
+
+  const overviewVillaChartData = useMemo(() => buildVillaChart(overviewData.villas.filter(v => !v.is_company_property), overviewData.workEntries, overviewData.programs, overviewData.invoices, overviewStart), [overviewData, overviewStart]);
 
   const departmentPerformanceData = useMemo(
     () => buildDepartmentPerformance(data.departments, data.services, data.workEntries),
@@ -3693,6 +3700,12 @@ export default function App() {
                 />
               </div>
 
+              <div style={{display:"flex", alignItems:"center", gap:8, flexWrap:"wrap", marginBottom:12}}>
+                {[["month", "This Month"], ["year", "This Year"]].map(([value,label]) => (
+                  <button key={value} type="button" className="refresh-button" aria-pressed={overviewPeriod === value} onClick={() => setOverviewPeriod(value)} style={overviewPeriod === value ? {background:"#718477", color:"#fff"} : {}}>{tr(label)}</button>
+                ))}
+                <span className="muted">{dateLabel(overviewStart)} – {dateLabel(overviewToday)}</span>
+              </div>
               <div className="stats-grid financial-stats">
                 <StatCard
                   label="Work Revenue"
@@ -3704,7 +3717,7 @@ export default function App() {
                 <StatCard
                   label="Program Revenue"
                   value={money(totals.programRevenue)}
-                  detail="Monthly prices of currently active programs"
+                  detail="Program fees for selected period"
                   icon={Sprout}
                 />
 
@@ -3929,7 +3942,7 @@ export default function App() {
                         </ResponsiveContainer>
                       </div>
                     )
-                  ) : villaChartData.length === 0 ? (
+                  ) : overviewVillaChartData.length === 0 ? (
                     <div className="empty-state chart-empty">
                       No villas are available to chart yet.
                     </div>
@@ -3937,7 +3950,7 @@ export default function App() {
                     <div className="chart-wrap">
                       <ResponsiveContainer width="100%" height="100%">
                         <BarChart
-                          data={villaChartData}
+                          data={overviewVillaChartData}
                           margin={{ top: 12, right: 12, left: 0, bottom: 0 }}
                           barGap={5}
                         >
