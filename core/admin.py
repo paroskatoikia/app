@@ -947,6 +947,22 @@ class WorkEntryAdmin(admin.ModelAdmin):
         )}),
     )
 
+    def get_fieldsets(self, request, obj=None):
+        fieldsets = super().get_fieldsets(request, obj)
+        if obj is not None:
+            return fieldsets
+        return tuple(
+            (title, {**options, "fields": tuple(
+                field for field in options["fields"] if field != "ownership"
+            )})
+            for title, options in fieldsets
+        )
+
+    def save_model(self, request, obj, form, change):
+        if not change:
+            obj.ownership = Ownership.CUSTOMER
+        super().save_model(request, obj, form, change)
+
     @admin.display(description="Total customer charge")
     def total_customer_charge_display(self, obj):
         if not obj or not obj.pk:
@@ -1688,6 +1704,10 @@ class GroupedWorkEntryAdmin(WorkEntryAdmin):
         for field in fields:
             if not change or field in form.changed_data:
                 setattr(entry, field, getattr(obj, field))
+
+        if not change:
+            entry.ownership = Ownership.CUSTOMER
+            obj.ownership = Ownership.CUSTOMER
 
         entry.save()
 
