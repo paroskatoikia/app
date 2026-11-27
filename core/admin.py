@@ -564,7 +564,6 @@ class HouseInfoInline(nested_admin.NestedStackedInline):
     fieldsets = (
         ("Wi-Fi", {"fields": ("wifi_name", "wifi_password")}),
         ("Alarm", {"fields": ("alarm_code", "alarm_company", "alarm_phone")}),
-        ("Access and emergencies", {"fields": ("access_instructions", "emergency_notes")}),
     )
 
 
@@ -599,9 +598,9 @@ class VillaAdmin(nested_admin.NestedModelAdmin):
     inlines = [
         VillaProgramInline,
         VillaServicePriceInline,
+        HouseWaterTankInline,
         HouseInfoInline,
         VillaFinancialSummaryInline,
-        HouseWaterTankInline,
     ]
 
     actions = ["recalculate_finances"]
@@ -1110,7 +1109,6 @@ class HouseInfoAdmin(admin.ModelAdmin):
         ("Villa", {"fields": ("house",)}),
         ("Wi-Fi (authorized staff only)", {"fields": ("wifi_name", "wifi_password")}),
         ("Alarm (authorized staff only)", {"fields": ("alarm_code", "alarm_company", "alarm_phone")}),
-        ("Access", {"fields": ("access_instructions", "emergency_notes")}),
     )
 
 
