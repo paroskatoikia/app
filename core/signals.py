@@ -110,7 +110,14 @@ def update_villa_program_finances(sender, instance, **kwargs):
 def delete_villa_program_finances(sender, instance, **kwargs):
     if kwargs.get("raw", False):
         return
-    rebuild_villa_financial_summaries(instance.house)
+    # During a cascade, wait until the parent deletion has committed.
+    house_id = instance.house_id
+    using = kwargs.get("using", "default")
+    def refresh_surviving_house():
+        house = House.objects.using(using).filter(pk=house_id).first()
+        if house is not None:
+            rebuild_villa_financial_summaries(house)
+    transaction.on_commit(refresh_surviving_house, using=using)
 
 
 # --------------------------------------------------

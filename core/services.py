@@ -43,7 +43,7 @@ def get_monthly_program_revenue(house, period_start):
     A full monthly price is charged if the program overlaps
     any part of the calendar month. No prorating.
 
-    Blank start date = no lower date boundary.
+    Blank start date = villa creation date (provisional). Future months are excluded.
     Blank end date = no upper date boundary.
     """
 
@@ -52,7 +52,7 @@ def get_monthly_program_revenue(house, period_start):
         period_start.month,
     )
 
-    if house.is_company_property:
+    if house.is_company_property or period_start > timezone.localdate():
         return ZERO
 
     programs = VillaProgram.objects.filter(house=house)
@@ -61,7 +61,7 @@ def get_monthly_program_revenue(house, period_start):
 
     for program in programs:
         if (
-            (program.start_date is None or program.start_date <= period_end)
+            ((program.start_date or timezone.localdate(house.created_at)) <= min(period_end, timezone.localdate()))
             and
             (program.end_date is None or program.end_date >= period_start)
         ):
