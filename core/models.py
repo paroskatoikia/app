@@ -2,7 +2,7 @@ from decimal import Decimal
 
 from django.core.exceptions import ValidationError
 from django.core.validators import MinValueValidator, FileExtensionValidator
-from django.db import models
+from django.db import models, transaction
 
 import os
 import re
@@ -1439,20 +1439,34 @@ class SupplierPayment(models.Model):
         blank=True
     )
 
+    receipt = models.FileField(
+        upload_to="supplier_receipts/%Y/%m/",
+        blank=True,
+        null=True,
+        validators=[FileExtensionValidator(allowed_extensions=["pdf", "jpg", "jpeg", "png", "webp", "gif", "bmp", "tif", "tiff", "heic", "heif"])],
+        help_text="Upload a PDF or image of the payment receipt.",
+    )
     notes = models.TextField(blank=True)
 
     def clean(self):
         super().clean()
         if self.invoice_id and (self.invoice.ownership != Ownership.COMPANY or self.invoice.supplier_id != self.supplier_id):
             raise ValidationError({"invoice": "Select a company invoice belonging to this supplier."})
+        if self.invoice_id and self.amount is not None:
+            paid = type(self).objects.filter(invoice_id=self.invoice_id).exclude(pk=self.pk).aggregate(total=models.Sum("amount"))["total"] or Decimal("0")
+            if self.amount > self.invoice.amount - paid:
+                raise ValidationError({"amount": "Payment exceeds the outstanding invoice balance."})
         if self.invoice_id:
             self.reference = self.invoice.invoice_number
 
     def save(self, *args, **kwargs):
-        self.full_clean()
-        if kwargs.get("update_fields") is not None:
-            kwargs["update_fields"] = set(kwargs["update_fields"]) | {"reference"}
-        return super().save(*args, **kwargs)
+        with transaction.atomic():
+            if self.invoice_id:
+                self.invoice = Invoice.objects.select_for_update().get(pk=self.invoice_id)
+            self.full_clean()
+            if kwargs.get("update_fields") is not None:
+                kwargs["update_fields"] = set(kwargs["update_fields"]) | {"reference"}
+            return super().save(*args, **kwargs)
 
     class Meta:
         ordering = ["-payment_date", "-id"]
@@ -1501,14 +1515,21 @@ class CustomerPayment(models.Model):
         super().clean()
         if self.invoice_id and (self.invoice.ownership != Ownership.CUSTOMER or not self.invoice.house_id or self.invoice.house.customer_id != self.customer_id):
             raise ValidationError({"invoice": "Select an invoice belonging to this customer."})
+        if self.invoice_id and self.amount is not None:
+            paid = type(self).objects.filter(invoice_id=self.invoice_id).exclude(pk=self.pk).aggregate(total=models.Sum("amount"))["total"] or Decimal("0")
+            if self.amount > self.invoice.amount - paid:
+                raise ValidationError({"amount": "Payment exceeds the outstanding invoice balance."})
         if self.invoice_id:
             self.reference = self.invoice.invoice_number
 
     def save(self, *args, **kwargs):
-        self.full_clean()
-        if kwargs.get("update_fields") is not None:
-            kwargs["update_fields"] = set(kwargs["update_fields"]) | {"reference"}
-        return super().save(*args, **kwargs)
+        with transaction.atomic():
+            if self.invoice_id:
+                self.invoice = Invoice.objects.select_for_update().get(pk=self.invoice_id)
+            self.full_clean()
+            if kwargs.get("update_fields") is not None:
+                kwargs["update_fields"] = set(kwargs["update_fields"]) | {"reference"}
+            return super().save(*args, **kwargs)
 
     class Meta:
         ordering = ["-payment_date", "-id"]

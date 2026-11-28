@@ -1,21 +1,50 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, createContext, useContext } from "react";
 import {
-  LayoutDashboard, Building2, Users, UserRound, BriefcaseBusiness,
+  ArrowLeft, UploadCloud, CheckCircle2, Building2, Users, UserRound, BriefcaseBusiness,
   ClipboardList, Sprout, FileText, ChartNoAxesCombined, Settings,
   Search, Bell, Menu, X, RefreshCw, LogOut, CircleAlert, Wallet, Truck, CreditCard, Download, ClipboardCheck, Droplets
 } from "lucide-react";
 import {
-  ResponsiveContainer, BarChart, Bar, Legend,
-  XAxis, YAxis, CartesianGrid, Tooltip,
+  ResponsiveContainer, BarChart, Bar, Legend as RechartsLegend,
+  XAxis as RechartsXAxis, YAxis as RechartsYAxis, CartesianGrid as RechartsGrid, Tooltip as RechartsTooltip,
   PieChart, Pie, Cell
 } from "recharts";
 import "./App.css";
+import { Toaster, toast } from "sonner";
+
+// Shared analytics presentation; original data and formatters remain unchanged.
+function Tooltip(props) {
+  return <RechartsTooltip cursor={{ fill: "#e8f2f0", opacity: 0.65 }}
+    contentStyle={{ background: "#fff", border: "1px solid #dce8e7", borderRadius: 12, padding: "12px 16px", boxShadow: "0 12px 32px #123c3d20", fontSize: 12 }}
+    labelStyle={{ color: "#183a40", fontWeight: 800, marginBottom: 7 }}
+    itemStyle={{ color: "#344e53", fontWeight: 600 }} {...props} />;
+}
+function Legend({ wrapperStyle, ...props }) {
+  return <RechartsLegend iconType="circle" iconSize={8} {...props} wrapperStyle={{ fontSize: 11, paddingTop: 10, color: "#52686c", ...wrapperStyle }} />;
+}
+function XAxis({ tick, ...props }) {
+  return <RechartsXAxis axisLine={false} tickLine={false} tickMargin={9} {...props} tick={{ fontSize: 11, ...tick, fill: "#52686c" }} />;
+}
+function YAxis({ tick, ...props }) {
+  return <RechartsYAxis axisLine={false} tickLine={false} tickMargin={8} {...props} tick={{ fontSize: 11, ...tick, fill: "#52686c" }} />;
+}
+function CartesianGrid(props) {
+  return <RechartsGrid {...props} stroke="#e1ebeb" strokeDasharray="4 5" />;
+}
 
 const API_URL = (import.meta.env.VITE_API_URL || "http://127.0.0.1:8000/api").replace(/\/$/, "");
 
 
 let uiLanguage = typeof localStorage !== "undefined" && localStorage.getItem("pk_language") === "el" ? "el" : "en";
 const greek = {
+  "Service":"Υπηρεσία", "Payment details":"Στοιχεία πληρωμής", "Invoice summary":"Σύνοψη τιμολογίου", "After this payment":"Μετά την πληρωμή", "Choose receipt":"Επιλογή αποδεικτικού", "Back to payments":"Επιστροφή στις πληρωμές", "Select a party and invoice to see the balance.":"Επιλέξτε συναλλασσόμενο και τιμολόγιο για το υπόλοιπο.", "Register a service payment":"Καταχώριση πληρωμής υπηρεσίας", "Saving...":"Αποθήκευση...", "Payment exceeds outstanding balance":"Το ποσό υπερβαίνει το υπόλοιπο", "PDF or image":"PDF ή εικόνα",
+  "Save payment":"Αποθήκευση πληρωμής", "Select invoice":"Επιλογή τιμολογίου", "No outstanding invoices":"Δεν υπάρχουν ανεξόφλητα τιμολόγια", "Invoice Payment":"Πληρωμή τιμολογίου", "Services & Programs":"Υπηρεσίες και προγράμματα",
+  "Company invoice payment register": "Μητρώο εξόφλησης εταιρικών τιμολογίων",
+  "Search invoice number or supplier": "Αναζήτηση αριθμού τιμολογίου ή προμηθευτή",
+  "View receipt": "Προβολή αποδεικτικού",
+  "All suppliers": "Όλοι οι προμηθευτές",
+  "Partially paid": "Μερικώς εξοφλημένο",
+  "Unavailable": "Μη διαθέσιμο",
   "This Month": "Αυτός ο μήνας", "This Year": "Αυτό το έτος", "Financial period": "Οικονομική περίοδος",
   "COMPANY": "ΕΤΑΙΡΕΙΑ", "CUSTOMERS": "ΠΕΛΑΤΕΣ", "OPERATIONS": "ΛΕΙΤΟΥΡΓΙΕΣ",
   "Company": "Εταιρεία", "Ownership": "Ιδιοκτησία", "Company Invoices": "Τιμολόγια εταιρείας", "Customer Invoices": "Τιμολόγια πελατών", "Payment status": "Κατάσταση πληρωμής",
@@ -70,6 +99,7 @@ const greek = {
   "Charged": "Χρεώσεις",
   "Unmatched": "Μη αντιστοιχισμένες πληρωμές",
   "Invoice balance": "Υπόλοιπο τιμολογίων",
+  "Invoice Outstanding": "Υπόλοιπο τιμολογίων",
   "Service balance": "Υπόλοιπο υπηρεσιών",
   "Invoice reimbursements": "Εξοφλήσεις τιμολογίων",
   "Services & subscriptions": "Υπηρεσίες & συνδρομές",
@@ -312,18 +342,18 @@ const addModels = {
   departments: ["department", "Add Department"], services: ["servicecategory", "Add Service"],
   companyInvoices: ["invoice", "Add Invoice"], customerInvoices: ["invoice", "Add Invoice"], workEntries: ["workentry", "Add Work Entry"], invoices: ["invoice", "Add Invoice"],
   customerPayments: ["customerpayment", "Add Customer Payment"], supplierPayments: ["supplierpayment", "Add Supplier Payment"],
-  companyGas: ["company_gas", "Add Fuel Expense"], programs: ["house", "Add Program"]
+  companyGas: ["company_gas", "Add Fuel Expense"], groupedWork: ["workentry", "Add Grouped Work Entries"], servicePrices: ["villaserviceprice", "Add Service Price"], departmentCosts: ["departmentcost", "Add Department Cost"], ika: ["ika", "Add IKA"], programs: ["house", "Add Program"]
 };
+const EntryContext = createContext(null);
 function AddRecord({page}) {
-  const entry = addModels[page];
+  const open=useContext(EntryContext); const entry=addModels[page];
   if (!entry) return null;
-  const [model, label] = entry;
-  // Programs are managed as inlines on existing villas, not a standalone admin model.
-  const path = `/admin/core/${model}/${page === "programs" ? "" : "add/"}`;
-  const url = new URL(path, new URL(API_URL, window.location.origin).origin);
-  if (page === "companyInvoices" || page === "customerInvoices") url.searchParams.set("ownership", page === "companyInvoices" ? "company" : "customer");
-  const href = url.href;
-  return <a className="refresh-button" href={href} target="_blank" rel="noopener noreferrer" style={{textDecoration:"none"}}>+ {tr(label)}</a>;
+  if (page === "villas") {
+    const href = new URL("/admin/core/house/add/", new URL(API_URL, window.location.origin).origin).href;
+    return <a className="refresh-button" href={href} target="_blank" rel="noopener noreferrer" style={{textDecoration:"none"}}>+ {tr(entry[1])}</a>;
+  }
+  if (!open) return null;
+  return <button type="button" className="refresh-button" onClick={()=>open(page)}>+ {tr(entry[1])}</button>;
 }
 function InvoiceLink({record}) {
   const label = record.invoice_number || "—";
@@ -354,7 +384,6 @@ const ENDPOINTS = {
 };
 
 const navigation = [
-  { id: "overview", label: "Overview", icon: LayoutDashboard },
   { id: "companyInvoices", label: "Company Invoices", icon: FileText, group: "COMPANY" },
   { id: "supplierPayments", label: "Company Invoice Payments", icon: CreditCard },
   { id: "companyGas", label: "Company Gas", icon: Truck },
@@ -805,15 +834,15 @@ function buildEmployeePerformance(employees, workEntries, departments, ikaRecord
 // Switchable financial chart used on the Villas, Employees, Departments and Services pages.
 function FinancialBreakdownChart({ displayType, revenue, expenses, grossProfit }) {
   const pieData = [
-    { name: "Gross profit", value: Math.max(0, number(grossProfit)), color: "#3977b8" },
-    { name: "Costs", value: Math.max(0, number(expenses)), color: "#c85b55" },
+    { name: "Gross profit", value: Math.max(0, number(grossProfit)), color: "#187e91" },
+    { name: "Costs", value: Math.max(0, number(expenses)), color: "#c65e61" },
   ];
 
   if (displayType === "pie") {
     return (
       <ResponsiveContainer width="100%" height="100%">
         <PieChart>
-          <Pie
+          <Pie cornerRadius={5}
             data={pieData}
             dataKey="value"
             nameKey="name"
@@ -860,7 +889,7 @@ function FinancialBreakdownChart({ displayType, revenue, expenses, grossProfit }
           }).format(value)}
         />
         <Tooltip formatter={(value) => money(value)} />
-        <Bar dataKey="amount" name={tr("Amount")} radius={[4, 4, 0, 0]} maxBarSize={34} fill="#b99b65" />
+        <Bar dataKey="amount" name={tr("Amount")} radius={[8, 8, 2, 2]} maxBarSize={42}>{["#187e91", "#c65e61", number(grossProfit) < 0 ? "#c65e61" : "#238878"].map((color, i) => <Cell key={i} fill={color}/>)}</Bar>
       </BarChart>
     </ResponsiveContainer>
   );
@@ -932,7 +961,7 @@ function PerformancePage({
           <p className="muted">{tr(subtitle)}</p>
         </div>
         {onRefresh && (
-          <AddRecord page={title === "Services" ? "services" : "employees"}/>
+          <><AddRecord page={title === "Services" ? "services" : "employees"}/>{title!=="Services"&&<AddRecord page="ika"/>}</>
         )}
       </div>
 
@@ -1470,12 +1499,12 @@ function DepartmentBoxplots({ records, title }) {
 
 function PaymentComparisonChart({ displayType, paid, unpaid }) {
   const values = [
-    { name: tr("Paid"), amount: Math.max(0, paid), color: "#718477" },
-    { name: tr("Unpaid"), amount: Math.max(0, unpaid), color: "#b99b65" },
+    { name: tr("Paid"), amount: Math.max(0, paid), color: "#238878" },
+    { name: tr("Unpaid"), amount: Math.max(0, unpaid), color: "#c49a49" },
   ];
   if (displayType === "pie") {
     return <ResponsiveContainer width="100%" height="100%"><PieChart>
-      <Pie data={values} dataKey="amount" nameKey="name" cx="50%" cy="50%" innerRadius="45%" outerRadius="75%" label={({ percent }) => `${(percent * 100).toFixed(0)}%`}>
+      <Pie cornerRadius={5} data={values} dataKey="amount" nameKey="name" cx="50%" cy="50%" innerRadius="45%" outerRadius="75%" label={({ percent }) => `${(percent * 100).toFixed(0)}%`}>
         {values.map((v) => <Cell key={v.name} fill={v.color}/>)}
       </Pie>
       <Tooltip formatter={(v) => money(v)}/><Legend wrapperStyle={{ fontSize: 11 }}/>
@@ -1485,7 +1514,7 @@ function PaymentComparisonChart({ displayType, paid, unpaid }) {
     <CartesianGrid strokeDasharray="3 3" vertical={false}/>
     <XAxis dataKey="name"/><YAxis tickFormatter={(v) => new Intl.NumberFormat("en-GB", { notation: "compact" }).format(v)}/>
     <Tooltip formatter={(v) => money(v)}/>
-    <Bar dataKey="amount" name={tr("Amount")} maxBarSize={55} radius={[5, 5, 0, 0]}>
+    <Bar dataKey="amount" name={tr("Amount")} maxBarSize={55} radius={[8, 8, 2, 2]}>
       {values.map((v) => <Cell key={v.name} fill={v.color}/>)}
     </Bar>
   </BarChart></ResponsiveContainer>;
@@ -1505,7 +1534,7 @@ function DepartmentCostBars({ records, title }) {
         <XAxis type="number" tickFormatter={(v) => new Intl.NumberFormat("en-GB", { notation: "compact" }).format(v)}/>
         <YAxis type="category" dataKey="department" width={120} tick={{ fontSize: 11 }}/>
         <Tooltip formatter={(v) => money(v)}/>
-        <Bar dataKey="amount" name={tr("Amount")} fill="#b99b65" radius={[0, 5, 5, 0]} maxBarSize={26}/>
+        <Bar dataKey="amount" name={tr("Amount")} fill="#c49a49" radius={[2, 8, 8, 2]} maxBarSize={26}/>
       </BarChart></ResponsiveContainer>
     </div> : <div className="empty-state">No departmental amounts available.</div>}
   </section>;
@@ -1714,10 +1743,10 @@ function AccountAnalytics({ kind, data, onRefresh, token }) {
           <input value={accountSearch} onChange={(e) => {setAccountSearch(e.target.value);setAccountPage(1);}} placeholder={`Search ${isSupplier ? "suppliers" : "customers"}...`} />
         </div>
         <div className="table-scroll"><table>
-          <thead><tr><th>{tr("Name")}</th>{isSupplier ? <><th>Charges</th><th>Paid</th><th>Unpaid / credit</th></> : <>{["Service charges","Service paid","Service balance","Invoice charges","Invoice paid","Invoice balance","Unmatched payments","Total outstanding"].map(x=><th key={x}>{tr(x)}</th>)}</>}{isSupplier && <th>{tr("Department breakdown")}</th>}{!isSupplier && <th style={{textAlign:"right"}}>{tr("Customer statement")}</th>}</tr></thead>
+          <thead><tr><th>{tr("Name")}</th>{isSupplier ? <><th>Charges</th><th>Paid</th><th>Unpaid / credit</th></> : <>{["Service charges","Service paid","Service balance","Invoice Outstanding","Total outstanding"].map(x=><th key={x}>{tr(x)}</th>)}</>}{isSupplier && <th>{tr("Department breakdown")}</th>}{!isSupplier && <th style={{textAlign:"right"}}>{tr("Customer statement")}</th>}</tr></thead>
           <tbody>{visibleAccounts.map((r) => <tr key={r.id}>
             <td>{r.name}</td>
-            {isSupplier ? <><td>{money(r.charged)}</td><td>{money(r.paid)}</td><td>{money(r.balance)}</td></> : <>{[r.serviceCharges,r.servicePaid,r.serviceBalance,r.invoiceCharges,r.invoicePaid,r.invoiceBalance,r.unmatched,r.outstanding].map((v,i)=><td key={i}>{money(v)}</td>)}</>}
+            {isSupplier ? <><td>{money(r.charged)}</td><td>{money(r.paid)}</td><td>{money(r.balance)}</td></> : <>{[r.serviceCharges,r.servicePaid,r.serviceBalance,r.invoiceBalance,r.outstanding].map((v,i)=><td key={i}>{money(v)}</td>)}</>}
             {isSupplier && <td>{[...r.departments.entries()].map(([d, amount]) => `${d}: ${money(amount)}`).join(" · ") || "—"}</td>}
             {!isSupplier && <td><div style={{display:"flex",justifyContent:"flex-end",alignItems:"center",gap:6,whiteSpace:"nowrap"}}>
               <button type="button" className="refresh-button" title={tr("Preview")} aria-label={`${tr("Preview")} — ${r.name}`} onClick={() => previewCustomerStatement(r)} style={{padding:"5px 8px",fontSize:11,gap:4,whiteSpace:"nowrap"}}><FileText size={12}/> {tr("Preview")}</button>
@@ -1804,16 +1833,16 @@ function customerAccountSplit(data, today) {
 function sumSplit(rows){return rows.reduce((a,r)=>{for(const k of Object.keys(a))a[k]+=r[k]||0;return a;},{servicePaid:0,invoicePaid:0,serviceBalance:0,invoiceBalance:0,unmatched:0});}
 function SplitAccountCharts({row, displayType}) {
   const values = [
-    { name: tr("Unpaid services"), amount: Math.max(0, number(row.serviceBalance)), color: "#b99b65" },
-    { name: tr("Paid services"), amount: Math.max(0, number(row.servicePaid)), color: "#718477" },
-    { name: tr("Unpaid invoices"), amount: Math.max(0, number(row.invoiceBalance)), color: "#d2b88a" },
-    { name: tr("Paid invoices"), amount: Math.max(0, number(row.invoicePaid)), color: "#466858" },
+    { name: tr("Unpaid services"), amount: Math.max(0, number(row.serviceBalance)), color: "#c49a49" },
+    { name: tr("Paid services"), amount: Math.max(0, number(row.servicePaid)), color: "#238878" },
+    { name: tr("Unpaid invoices"), amount: Math.max(0, number(row.invoiceBalance)), color: "#e2b96e" },
+    { name: tr("Paid invoices"), amount: Math.max(0, number(row.invoicePaid)), color: "#145c55" },
   ];
   return <>
     <div style={{width:"100%", height:260}}>
       <ResponsiveContainer width="100%" height="100%">
         {displayType === "pie" ? <PieChart>
-          <Pie data={values} dataKey="amount" nameKey="name" innerRadius="35%" outerRadius="70%">
+          <Pie cornerRadius={5} data={values} dataKey="amount" nameKey="name" innerRadius="35%" outerRadius="70%">
             {values.map(v => <Cell key={v.name} fill={v.color}/>)}
           </Pie>
           <Tooltip formatter={v => money(v)}/><Legend wrapperStyle={{fontSize:10}}/>
@@ -1822,7 +1851,7 @@ function SplitAccountCharts({row, displayType}) {
           <XAxis dataKey="name" interval={0} angle={-35} textAnchor="end" height={65} tick={{fontSize:10}}/>
           <YAxis width={42} tick={{fontSize:10}} tickFormatter={v => new Intl.NumberFormat(uiLanguage === "el" ? "el-GR" : "en-GB", {notation:"compact"}).format(v)}/>
           <Tooltip formatter={v => money(v)}/>
-          <Bar dataKey="amount" name={tr("Amount")} maxBarSize={55} radius={[5,5,0,0]}>
+          <Bar dataKey="amount" name={tr("Amount")} maxBarSize={55} radius={[8, 8, 2, 2]}>
             {values.map(v => <Cell key={v.name} fill={v.color}/>)}
           </Bar>
         </BarChart>}
@@ -1852,15 +1881,126 @@ function CustomerInvoiceRegister({data}) {
   return <section className="panel table-panel" style={{marginTop:20}}>
     <div className="panel-heading"><div><h2>{tr("Customer invoice payment register")}</h2><p className="muted">{tr("Only payments linked to an invoice are allocated. General payments remain at account level.")}</p></div></div>
     <div className="stats-grid"><StatCard label={tr("Invoiced")} value={money(filtered.reduce((s,r)=>s+number(r.amount),0))} icon={FileText}/><StatCard label={tr("Allocated payments")} value={money(filtered.reduce((s,r)=>s+r.paid,0))} icon={Wallet}/><StatCard label="Outstanding" value={money(filtered.reduce((s,r)=>s+r.balance,0))} icon={CreditCard}/></div>
-    <div className="search-box"><Search size={17}/><input value={query} onChange={e=>{setQuery(e.target.value);setPage(1);}} placeholder={tr("Search invoice number, customer, villa or supplier")}/></div>
-    <select value={status} onChange={e=>{setStatus(e.target.value);setPage(1);}}>{["All","Paid","Unpaid"].map(x=><option key={x} value={x}>{tr(x)}</option>)}</select>
+    <div className="mb-4 flex flex-wrap items-center gap-3"><div className="search-box"><Search size={17}/><input value={query} onChange={e=>{setQuery(e.target.value);setPage(1);}} placeholder={tr("Search invoice number, customer, villa or supplier")}/></div>
+    <select aria-label={tr("Status")} className="h-11 min-w-0 cursor-pointer rounded-lg border border-teal-200 bg-white px-4 pr-8 text-sm font-medium text-slate-700 shadow-sm transition-colors hover:border-teal-500 focus:border-teal-600 focus:outline-none focus:ring-2 focus:ring-teal-500/30 disabled:cursor-not-allowed disabled:opacity-60 w-full sm:w-auto sm:min-w-44" value={status} onChange={e=>{setStatus(e.target.value);setPage(1);}}>{["All","Paid","Unpaid"].map(x=><option key={x} value={x}>{tr(x)}</option>)}</select></div>
     <div className="table-scroll"><table><thead><tr>{["ID","Invoice","Date","Customer","Villa","Supplier","Description","Amount","Paid","Status","Payments / receipts"].map(x=><th key={x}>{tr(x)}</th>)}</tr></thead><tbody>{filtered.slice((current-1)*10,current*10).map(r=><tr key={r.id}><td>{r.id}</td><td><InvoiceLink record={r}/></td><td>{dateLabel(r.invoice_date)}</td><td>{r.customerName}</td><td>{r.villaName}</td><td>{r.supplierName}</td><td>{r.description}</td><td>{money(r.amount)}</td><td>{money(r.paid)}</td><td>{tr(r.status)}</td><td>{r.payments.length?r.payments.map(p=><div key={p.id}>{dateLabel(p.payment_date)} · {money(p.amount)} · <PaymentReceipt record={p}/></div>):"—"}</td></tr>)}</tbody></table></div>
     {!filtered.length && <div className="empty-state">{tr("No matching invoices.")}</div>}
     <PaginationControls page={current} totalPages={pages} totalItems={filtered.length} onPageChange={setPage}/>
   </section>;
 }
 
-function PaymentsAnalytics({ kind, data, onRefresh }) {
+function CompanyInvoiceRegister({data, paymentsReady}) {
+  const [query, setQuery] = useState("");
+  const [status, setStatus] = useState("All");
+  const [page, setPage] = useState(1);
+  const today = getTodayLocalDate();
+  const [supplier, setSupplier] = useState("");
+  const rows = data.invoices.filter(i => !i.invoice_date || i.invoice_date <= today).flatMap(i => {
+    if (!isCompanyInvoice(i)) return [];
+    const payments = data.supplierPayments.filter(p => String(relationId(p.invoice)) === String(i.id) && String(relationId(p.supplier)) === String(relationId(i.supplier)) && (!p.payment_date || p.payment_date <= today));
+    const amount = Math.round(number(i.amount)*100);
+    const paid = payments.reduce((sum,p) => sum + Math.round(number(p.amount)*100),0);
+    return [{...i, supplierName:resolveName(i.supplier,data.suppliers), payments, paid:paid/100, balance:Math.max(0,amount-paid)/100, excess:Math.max(0,paid-amount)/100, status:!paymentsReady?"Unavailable":paid>=amount?"Paid":paid>0?"Partially paid":"Unpaid"}];
+  });
+  const filtered = rows.filter(r => (!supplier || String(relationId(r.supplier)) === supplier) && (status === "All" || r.status === status || (status === "Unpaid" && r.status === "Partially paid")) && [r.id,r.invoice_number,r.supplierName,r.description].join(" ").toLowerCase().includes(query.toLowerCase()));
+  const pages = Math.max(1,Math.ceil(filtered.length/10));
+  const current = Math.min(page,pages);
+  return <section className="panel table-panel" style={{marginTop:20}}>
+    <div className="panel-heading"><div><h2>{tr("Company invoice payment register")}</h2><p className="muted">{tr("Only payments linked to an invoice are allocated. General payments remain at account level.")}</p></div></div>
+    <div className="stats-grid"><StatCard label={tr("Invoiced")} value={money(filtered.reduce((s,r)=>s+number(r.amount),0))} icon={FileText}/><StatCard label={tr("Allocated payments")} value={paymentsReady?money(filtered.reduce((s,r)=>s+r.paid,0)):"—"} icon={Wallet}/><StatCard label="Outstanding" value={paymentsReady?money(filtered.reduce((s,r)=>s+r.balance,0)):"—"} icon={CreditCard}/></div>
+    <div className="mb-4 flex flex-wrap items-center gap-3"><div className="search-box"><Search size={17}/><input value={query} onChange={e=>{setQuery(e.target.value);setPage(1);}} placeholder={tr("Search invoice number or supplier")}/></div>
+    <select aria-label={tr("Supplier")} className="h-11 w-full min-w-0 cursor-pointer rounded-lg border border-teal-200 bg-white px-4 pr-8 text-sm font-medium text-slate-700 shadow-sm transition-colors hover:border-teal-500 focus:border-teal-600 focus:outline-none focus:ring-2 focus:ring-teal-500/30 sm:w-auto sm:min-w-60" value={supplier} onChange={e=>{setSupplier(e.target.value);setPage(1);}}><option value="">{tr("All suppliers")}</option>{[...data.suppliers].sort((a,b)=>a.name.localeCompare(b.name)).map(x=><option key={x.id} value={String(x.id)}>{x.name}</option>)}</select>
+    <select aria-label={tr("Status")} className="h-11 w-full min-w-0 cursor-pointer rounded-lg border border-teal-200 bg-white px-4 pr-8 text-sm font-medium text-slate-700 shadow-sm transition-colors hover:border-teal-500 focus:border-teal-600 focus:outline-none focus:ring-2 focus:ring-teal-500/30 sm:w-auto sm:min-w-44" value={status} onChange={e=>{setStatus(e.target.value);setPage(1);}}>{["All","Paid","Unpaid","Partially paid"].map(x=><option key={x} value={x}>{tr(x)}</option>)}</select></div>
+    <div className="table-scroll"><table><thead><tr>{["ID","Invoice","Date","Supplier","Description","Amount","Paid","Status","Payments / receipts"].map(x=><th key={x}>{tr(x)}</th>)}</tr></thead><tbody>{filtered.slice((current-1)*10,current*10).map(r=><tr key={r.id}><td>{r.id}</td><td><InvoiceLink record={r}/></td><td>{dateLabel(r.invoice_date)}</td><td>{r.supplierName}</td><td>{r.description}</td><td>{money(r.amount)}</td><td>{paymentsReady?money(r.paid):"—"}</td><td>{tr(r.status)}</td><td>{!paymentsReady?"—":r.payments.length?r.payments.map(p=><div key={p.id}>{dateLabel(p.payment_date)} · {money(p.amount)} · <PaymentReceipt record={p}/></div>):"—"}</td></tr>)}</tbody></table></div>
+    {!filtered.length && <div className="empty-state">{tr("No matching invoices.")}</div>}
+    <PaginationControls page={current} totalPages={pages} totalItems={filtered.length} onPageChange={setPage}/>
+  </section>;
+}
+
+function EntryHeader({title,Icon=ClipboardList}) {
+ return <header style={{display:"flex",alignItems:"center",gap:16,padding:"26px 30px",background:"linear-gradient(115deg,#123b46,#17645e 75%,#238479)",color:"white"}}><div style={{display:"grid",placeItems:"center",width:48,height:48,border:"1px solid #ffffff40",borderRadius:12,background:"#ffffff20"}}><Icon size={24}/></div><h1 style={{margin:0,color:"white",fontSize:26}}>{tr(title)}</h1></header>;
+}
+const entryLabels={"Save record":"Αποθήκευση καταχώρισης","Back":"Επιστροφή","Name":"Όνομα","Company name":"Επωνυμία","Tax number":"ΑΦΜ","Address":"Διεύθυνση","First name":"Όνομα","Last name":"Επώνυμο","Salary type":"Τύπος αμοιβής","Hourly rate":"Ωριαία αμοιβή","Daily rate":"Ημερήσια αμοιβή","Monthly salary":"Μηνιαίος μισθός","Hire date":"Ημερομηνία πρόσληψης","Active":"Ενεργός","Add Grouped Work Entries":"Ομαδική καταχώριση εργασιών","Add Service Price":"Προσθήκη τιμής υπηρεσίας","Add Department Cost":"Προσθήκη εξόδου τμήματος","Add IKA":"Προσθήκη ΙΚΑ","Add row":"Προσθήκη γραμμής","Remove":"Αφαίρεση","Attachment":"Συνημμένο","Start date":"Ημερομηνία έναρξης","End date":"Ημερομηνία λήξης","Program type":"Τύπος προγράμματος","Monthly price":"Μηνιαία τιμή","Company property":"Εταιρική κατοικία","Fuel type":"Τύπος καυσίμου","Package":"Πακέτο","Additional charges notes":"Σημειώσεις πρόσθετων χρεώσεων"};
+Object.assign(greek,entryLabels);
+function RecordEntry({page,data,apiRequest,onClose,onSaved}) {
+ const today=getTodayLocalDate();
+ const f=(key,label,type="text",required=false,options=null,initial="")=>({key,label,type,required,options,initial});
+ const opts=(rows,label=r=>r.name)=>rows.map(r=>[String(r.id),label(r)]);
+ const choice=(key,label,options,initial="",required=true)=>f(key,label,"select",required,options,initial);
+ const relation=(key,label,rows,required=true)=>choice(key,label,opts(rows,r=>r.full_name||r.name||`${r.first_name||""} ${r.last_name||""}`),"",required);
+ const txt=(key,label,required=false)=>f(key,label,"text",required);
+ const num=(key,label,initial="",required=true)=>f(key,label,"number",required,null,initial);
+ const dt=(key,label,required=true,initial=today)=>f(key,label,"date",required,null,initial);
+ const notes=f("notes","Notes","textarea"); const desc=f("description","Description","textarea");
+ const villas=data.villas.filter(v=>!v.is_company_property); const employees=data.employees.filter(e=>e.is_active!==false);
+ const [packages,setPackages]=useState([]); const [packageError,setPackageError]=useState("");
+ useEffect(()=>{if(page==="ika")apiRequest("/ika/packages/").then(setPackages).catch(e=>setPackageError(e.message));},[page]);
+ const contact=[txt("name","Name",true),f("email","Email","email"),txt("phone","Phone"),txt("tax_number","Tax number"),f("address","Address","textarea"),notes];
+ const work=[relation("house","Villa",villas),relation("employee","Employee",employees),relation("service","Service",data.services),dt("work_date","Work date"),num("hours","Hours"),desc,num("additional_charges","Additional charges","0"),f("additional_charges_notes","Additional charges notes","textarea")];
+ const invoice=[choice("ownership","Ownership",[["company","Company"],["customer","Customer"]],page==="companyInvoices"?"company":"customer"),relation("supplier","Supplier",data.suppliers),relation("department","Department",data.departments),relation("customer_ui","Customer",data.customers),relation("house","Villa",villas),txt("invoice_number","Invoice number",true),dt("invoice_date","Invoice date"),num("amount","Amount"),desc,f("attachment","Attachment","file")];
+ const configs={customers:["/customers/",[...contact.slice(0,1),txt("company_name","Company name"),...contact.slice(1)]],suppliers:["/suppliers/",contact],villas:["/villas/",[txt("name","Name",true),f("is_company_property","Company property","checkbox",false,null,false),relation("customer","Customer",data.customers),txt("area","Area"),desc]],departments:["/departments/",[txt("name","Name",true),desc]],services:["/services/",[relation("department","Department",data.departments),txt("name","Name",true),desc]],employees:["/employees/",[txt("first_name","First name",true),txt("last_name","Last name",true),f("email","Email","email"),txt("phone","Phone"),relation("department","Department",data.departments),choice("salary_type","Salary type",[["hourly","Hourly"],["daily","Daily"],["monthly","Monthly salary"]],"hourly"),num("hourly_rate","Hourly rate","0"),num("daily_rate","Daily rate","0"),num("monthly_salary","Monthly salary","0"),dt("hire_date","Hire date",false,""),f("is_active","Active","checkbox",false,null,true),notes]],workEntries:["/work-entries/",work],groupedWork:["/work-entries/batch/",work],companyInvoices:["/invoices/",invoice],customerInvoices:["/invoices/",invoice],invoices:["/invoices/",invoice],programs:["/programs/",[relation("house","Villa",villas),choice("program_type","Program type",[["bp","Basic Property Management"],["gardening","Gardening Maintenance"],["pool","Pool Maintenance"]]),num("price","Monthly price"),dt("start_date","Start date",false,today),dt("end_date","End date",false,"")]],servicePrices:["/service-prices/",[relation("house","Villa",villas),relation("service","Service",data.services),num("hourly_price","Hourly rate")]],departmentCosts:["/department-costs/",[relation("department","Department",data.departments),relation("house","Villa",data.villas,false),dt("cost_date","Date"),f("description","Description","textarea",true),num("amount","Amount"),notes]],companyGas:["/company-gas/",[relation("employee","Employee",employees),choice("gas_type","Fuel type",[["petrol","Petrol"],["diesel","Diesel"],["lpg","LPG"],["other","Other"]]),num("price_total","Amount"),dt("date","Date"),f("invoice_pdf","Attachment","file"),notes]],ika:["/ika/",[relation("employee","Employee",employees),relation("package","Package",packages),dt("start_date","Start date",true,today.slice(0,7)+"-01"),notes]]};
+ const [endpoint,fields]=configs[page]||["",[]];
+ const blank=()=>Object.fromEntries(fields.map(x=>[x.key,x.initial]));
+ const [rows,setRows]=useState(()=>[blank()]); const [busy,setBusy]=useState(false);const [error,setError]=useState("");
+ const isInvoice=endpoint==="/invoices/";
+ function visible(x,row){if(isInvoice&&x.key==="ownership"&&page!=="invoices")return false;if(isInvoice&&["house","customer_ui"].includes(x.key))return row.ownership==="customer";if(page==="villas"&&x.key==="customer")return !row.is_company_property;if(page==="employees"&&["hourly_rate","daily_rate","monthly_salary"].includes(x.key))return x.key===({hourly:"hourly_rate",daily:"daily_rate",monthly:"monthly_salary"}[row.salary_type]);return true;}
+ function change(i,key,value){setRows(old=>old.map((r,j)=>j!==i?r:{...r,[key]:value,...(key==="customer_ui"||key==="ownership"?{house:""}:{}),...(key==="is_company_property"?{customer:""}:{})}));}
+ async function submit(e){e.preventDefault();if(busy)return;setBusy(true);setError("");try{const payload=rows.map(row=>{const result={};for(const x of fields){if(x.key==="customer_ui"||(!visible(x,row)&&x.key!=="ownership"))continue;const v=row[x.key];if(v!==""&&v!==null)result[x.key]=v;}if(isInvoice&&row.ownership==="company")result.house=null;if(page==="villas"&&row.is_company_property)result.customer=null;if(endpoint.includes("work-entries"))result.ownership="customer";return result;});let body;if(page==="groupedWork")body=JSON.stringify(payload);else if(fields.some(x=>x.type==="file")){body=new FormData();for(const [k,v] of Object.entries(payload[0]))if(v!==null)body.append(k,v);}else body=JSON.stringify(payload[0]);await apiRequest(endpoint,{method:"POST",body});toast.success(uiLanguage === "el" ? "Η καταχώριση αποθηκεύτηκε" : "Record saved");onClose();await onSaved();}catch(e){setError(e.message);}finally{setBusy(false);}}
+ const control={width:"100%",boxSizing:"border-box",padding:"11px 12px",border:"1px solid #d0d5dd",borderRadius:7,background:"white",color:"#172b3a",font:"inherit",minHeight:44};
+ const label={display:"grid",gap:7,fontSize:13,fontWeight:600,color:"#344054",minWidth:0};
+ return <section style={{maxWidth:1080,margin:"0 auto",display:"grid",gap:16}}><div><button className="refresh-button" disabled={busy} onClick={onClose}><ArrowLeft size={17}/> {tr("Back")}</button></div><div style={{border:"1px solid #dbe5e7",borderRadius:16,overflow:"hidden",background:"#f8fafb",boxShadow:"0 12px 36px #123b4612"}}><EntryHeader title={addModels[page]?.[1]||"Add record"}/><form onSubmit={submit} style={{padding:"clamp(16px,3vw,30px)"}}><fieldset disabled={busy} style={{border:0,padding:0,margin:0,minWidth:0}}>{rows.map((row,i)=><section key={i} style={{padding:24,background:"white",border:"1px solid #dfe7ea",borderRadius:12,marginBottom:16}}>{page==="groupedWork"&&<div style={{display:"flex",justifyContent:"space-between",marginBottom:16}}><strong>{tr("Work entry")} {i+1}</strong>{rows.length>1&&<button type="button" className="refresh-button" onClick={()=>setRows(r=>r.filter((_,j)=>j!==i))}>{tr("Remove")}</button>}</div>}<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(min(100%,260px),1fr))",gap:20}}>{fields.filter(x=>visible(x,row)).map(x=>{let options=x.options||[];if(isInvoice&&x.key==="house")options=opts(villas.filter(v=>String(relationId(v.customer))===row.customer_ui));return <label key={x.key} style={{...label,...(["textarea","file"].includes(x.type)?{gridColumn:"1 / -1"}:{})}}>{tr(x.label)}{x.required?" *":""}{x.type==="select"?<select className="h-11 min-w-0 cursor-pointer rounded-lg border border-teal-200 bg-white px-4 pr-8 text-sm font-medium text-slate-700 shadow-sm transition-colors hover:border-teal-500 focus:border-teal-600 focus:outline-none focus:ring-2 focus:ring-teal-500/30 disabled:cursor-not-allowed disabled:opacity-60 w-full" required={x.required} value={row[x.key]} onChange={e=>change(i,x.key,e.target.value)}><option value="">{tr("Select")}</option>{options.map(([v,l])=><option key={v} value={v}>{tr(l)}</option>)}</select>:x.type==="textarea"?<textarea style={{...control,minHeight:90}} required={x.required} value={row[x.key]} onChange={e=>change(i,x.key,e.target.value)}/>:x.type==="checkbox"?<input type="checkbox" checked={!!row[x.key]} onChange={e=>change(i,x.key,e.target.checked)}/>:x.type==="file"?<div style={{display:"grid",justifyItems:"center",gap:10,padding:28,border:"1px dashed #80aaa4",borderRadius:10,background:"#f0f8f7",color:"#24564e"}}><UploadCloud size={38}/>{tr("Choose receipt")}<input type="file" accept={page==="companyGas"?".pdf":".pdf,image/*"} style={control} onChange={e=>change(i,x.key,e.target.files[0]||null)}/></div>:<input style={control} type={x.type} required={x.required} min={x.type==="number"?0:undefined} step={x.type==="number"?"0.01":undefined} value={row[x.key]} onChange={e=>change(i,x.key,e.target.value)}/>}</label>})}</div></section>)}{page==="groupedWork"&&<button type="button" className="refresh-button" disabled={rows.length>=50} onClick={()=>setRows(r=>[...r,blank()])}>+ {tr("Add row")}</button>}{(error||packageError)&&<p role="alert" style={{padding:16,background:"#fee2e2",color:"#991b1b",borderRadius:10}}>{error||packageError}</p>}<div style={{display:"flex",justifyContent:"flex-end",gap:12,marginTop:24,paddingTop:20,borderTop:"1px solid #dfe7ea"}}><button type="button" className="refresh-button" onClick={onClose}>{tr("Cancel")}</button><button type="submit" className="primary-button" disabled={busy} style={{background:"#24564e",color:"white",padding:"11px 22px",borderRadius:7}}><CheckCircle2 size={18}/> {tr(busy?"Saving...":"Save record")}</button></div></fieldset></form></div></section>;
+}
+
+function PaymentEntryForm({kind,data,ready,apiRequest,onRefresh,onClose}) {
+  const supplier=kind==="supplier";
+  const [party,setParty]=useState("");
+  const [mode,setMode]=useState("invoice");
+  const [invoice,setInvoice]=useState("");
+  const [amount,setAmount]=useState("");
+  const [date,setDate]=useState(getTodayLocalDate());
+  const [receipt,setReceipt]=useState(null);
+  const [notes,setNotes]=useState("");
+  const [busy,setBusy]=useState(false);
+  const [error,setError]=useState("");
+  const parties=supplier?data.suppliers:data.customers;
+  const payments=supplier?data.supplierPayments:data.customerPayments;
+  const cents=v=>Math.round(Number(v)*100);
+  const options=data.invoices.filter(i=>party && (supplier ? i.ownership==="company" && String(relationId(i.supplier))===party : i.ownership==="customer" && String(relationId(data.villas.find(v=>String(v.id)===String(relationId(i.house)))?.customer))===party)).map(i=>({...i,remaining:cents(i.amount)-payments.filter(p=>String(relationId(p.invoice))===String(i.id)).reduce((a,p)=>a+cents(p.amount),0)})).filter(i=>i.remaining>0);
+  const selected=options.find(i=>String(i.id)===invoice);
+  const valid=ready && party && date && Number.isFinite(Number(amount)) && cents(amount)>0 && (mode!=="invoice" || (selected && cents(amount)<=selected.remaining));
+  async function submit(e){
+    e.preventDefault(); if(!valid||busy)return; setBusy(true);setError("");
+    const body=new FormData();body.append(supplier?"supplier":"customer",party);body.append("payment_date",date);body.append("amount",amount);body.append("notes",notes);if(mode==="invoice")body.append("invoice",invoice);if(receipt)body.append("receipt",receipt);
+    try{await apiRequest(supplier?"/supplier-payments/":"/customer-payments/",{method:"POST",body});toast.success(uiLanguage === "el" ? "Η πληρωμή αποθηκεύτηκε" : "Payment saved");onClose();await onRefresh();}catch(e){setError(e.message);await onRefresh();}finally{setBusy(false);}
+  }
+  const field={display:"grid",gap:7,fontWeight:600,fontSize:13,color:"#344054",minWidth:0};
+  const control={width:"100%",boxSizing:"border-box",padding:"11px 12px",border:"1px solid #d0d5dd",borderRadius:7,background:"#fff",color:"#172b3a",font:"inherit",fontWeight:400,minHeight:44};
+  const total=selected?cents(selected.amount):0;
+  const paid=selected?total-selected.remaining:0;
+  const after=selected?Math.max(0,selected.remaining-(Number.isFinite(Number(amount))?cents(amount):0)):0;
+  const percent=total>0?Math.min(100,Math.max(0,paid/total*100)):0;
+  return <section style={{maxWidth:1080,margin:"0 auto",display:"grid",gap:16}}>
+    <div><button type="button" className="refresh-button" disabled={busy} onClick={onClose}><ArrowLeft size={17}/> {tr("Back to payments")}</button></div>
+    <div style={{border:"1px solid #dbe5e7",borderRadius:16,overflow:"hidden",background:"#fff",boxShadow:"0 12px 36px #123b4612"}}><header style={{display:"flex",alignItems:"center",gap:16,padding:"26px 30px",background:"linear-gradient(115deg,#123b46 0%,#17645e 75%,#238479 100%)",borderBottom:"1px solid #17645e",flexWrap:"wrap"}}><div style={{display:"grid",placeItems:"center",width:48,height:48,border:"1px solid #ffffff40",borderRadius:12,background:"#ffffff20",color:"white"}}><Wallet size={23}/></div><div><h1 style={{margin:0,fontSize:28,fontWeight:650,letterSpacing:"-0.8px",color:"#fff"}}>{tr(supplier?"Add Supplier Payment":"Add Customer Payment")}</h1><p style={{margin:"6px 0 0",color:"#d6eeeb",fontSize:14}}>{tr(supplier?"Company Invoice Payments":"Customer Payments & Invoices")}</p></div></header>
+    <form onSubmit={submit} style={{padding:"clamp(16px,3vw,30px)",background:"#f8fafb"}}><fieldset disabled={busy} style={{border:0,padding:0,margin:0,minWidth:0}}>
+    <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(min(100%,320px),1fr))",gap:20,alignItems:"stretch"}}>
+    <section className="panel" style={{padding:24,borderRadius:12,border:"1px solid #dfe7ea",boxShadow:"0 2px 6px #10182808",background:"#fff",display:"grid",gap:20}}><h2 style={{margin:0,fontSize:17,fontWeight:650,color:"#101828",paddingBottom:14,borderBottom:"1px solid #eaecf0"}}>{tr("Payment details")}</h2>
+    <label style={field}>{tr(supplier?"Supplier":"Customer")}<select className="h-11 min-w-0 cursor-pointer rounded-lg border border-teal-200 bg-white px-4 pr-8 text-sm font-medium text-slate-700 shadow-sm transition-colors hover:border-teal-500 focus:border-teal-600 focus:outline-none focus:ring-2 focus:ring-teal-500/30 disabled:cursor-not-allowed disabled:opacity-60 w-full" required value={party} onChange={e=>{setParty(e.target.value);setInvoice("");setAmount("");}}><option value="">{tr("Select")}</option>{[...parties].sort((a,b)=>a.name.localeCompare(b.name)).map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></label>
+    {!supplier&&<div style={field}>{tr("Payment type")}<div style={{display:"flex",gap:10}}>{[["invoice","Invoice"],["services","Service"]].map(([value,label])=><button key={value} type="button" aria-pressed={mode===value} onClick={()=>{setMode(value);setInvoice("");setAmount("");}} style={{...control,flex:1,cursor:"pointer",background:mode===value?"#f0f5f3":"#fff",color:mode===value?"#24564e":"#344054",borderColor:mode===value?"#24564e":"#d0d5dd",fontWeight:600}}>{tr(label)}</button>)}</div></div>}
+    {mode==="invoice"&&<label style={field}>{tr("Invoice")}<select className="h-11 min-w-0 cursor-pointer rounded-lg border border-teal-200 bg-white px-4 pr-8 text-sm font-medium text-slate-700 shadow-sm transition-colors hover:border-teal-500 focus:border-teal-600 focus:outline-none focus:ring-2 focus:ring-teal-500/30 disabled:cursor-not-allowed disabled:opacity-60 w-full" required disabled={!party} value={invoice} onChange={e=>{setInvoice(e.target.value);const i=options.find(i=>String(i.id)===e.target.value);setAmount(i?(i.remaining/100).toFixed(2):"");}}><option value="">{tr(!party||options.length?"Select invoice":"No outstanding invoices")}</option>{options.map(i=><option key={i.id} value={i.id}>{i.invoice_number} — {money(i.remaining/100)}</option>)}</select></label>}
+    <label style={field}>{tr("Payment date")}<input style={control} required type="date" value={date} onChange={e=>setDate(e.target.value)}/></label>
+    <label style={field}>{tr("Amount")} (€)<input style={{...control,fontSize:20,fontWeight:600}} required type="number" min="0.01" step="0.01" max={mode==="invoice"&&selected?selected.remaining/100:undefined} value={amount} onChange={e=>setAmount(e.target.value)}/></label>
+    <label style={field}>{tr("Notes")}<textarea style={{...control,minHeight:90,resize:"vertical"}} value={notes} onChange={e=>setNotes(e.target.value)}/></label></section>
+    <div style={{display:"flex",flexDirection:"column",gap:20,minWidth:0}}>{(mode!=="invoice"||selected)&&<section className="panel" style={{padding:24,borderRadius:12,border:"1px solid #dfe7ea",boxShadow:"0 2px 6px #10182808",background:"#fff",display:"grid",gap:18}}><h2 style={{margin:0,fontSize:17,fontWeight:650,color:"#101828",paddingBottom:14,borderBottom:"1px solid #eaecf0"}}>{tr(mode==="invoice"?"Invoice summary":"Service")}</h2>
+    {mode==="invoice"?(selected?<><div style={{color:"#64748b"}}>{tr("Amount")}<div style={{fontSize:32,fontWeight:750,color:"#183b40"}}>{money(total/100)}</div></div><div style={{display:"flex",justifyContent:"space-between",color:"#27805c"}}><span>{tr("Paid")}</span><strong>{money(paid/100)}</strong></div><div role="progressbar" aria-label={tr("Paid")} aria-valuenow={percent} aria-valuemin={0} aria-valuemax={100} style={{height:6,background:"#eaecf0",borderRadius:20,overflow:"hidden"}}><div style={{height:"100%",width:`${percent}%`,background:"#27805c"}}/></div><div style={{padding:"16px 0",borderTop:"1px solid #eaecf0",color:"#344054"}}>{tr("Outstanding")}<div style={{fontSize:30,fontWeight:750}}>{money(selected.remaining/100)}</div></div><div style={{padding:16,background:"#f8faf9",border:"1px solid #e4e7ec",color:"#24564e",borderRadius:8}}><CheckCircle2 size={20}/> {tr("After this payment")}<div style={{fontSize:26,fontWeight:700}}>{money(after/100)}</div></div>{cents(amount)>selected.remaining&&<p role="alert" style={{color:"#b91c1c"}}>{tr("Payment exceeds outstanding balance")}</p>}</>:null):<><p>{tr("Register a service payment")}</p><strong style={{fontSize:30}}>{money(Number(amount)||0)}</strong></>}
+    </section>}<section className="panel" style={{padding:24,borderRadius:12,border:"1px solid #dfe7ea",boxShadow:"0 2px 6px #10182808",background:"#fff",marginTop:"auto",marginBottom:"auto"}}><h2 style={{marginTop:0,fontSize:18}}>{tr("Receipt")}</h2><label style={{...field,border:"1px dashed #80aaa4",borderRadius:10,padding:"32px 20px",minHeight:210,alignContent:"center",textAlign:"center",justifyItems:"center",background:"#f0f8f7",color:"#24564e",cursor:"pointer"}}><UploadCloud size={38}/><strong>{tr("Choose receipt")}</strong><span>{tr("PDF or image")}</span><input style={{...control,fontSize:12,padding:8,minHeight:36}} type="file" accept=".pdf,image/*,.heic,.heif" onChange={e=>setReceipt(e.target.files[0]||null)}/>{receipt&&<span style={{overflowWrap:"anywhere"}}>{receipt.name}</span>}</label></section></div></div>
+    {error&&<p role="alert" style={{padding:16,background:"#fee2e2",color:"#991b1b",borderRadius:10}}>{error}</p>}
+    <div style={{display:"flex",justifyContent:"flex-end",gap:12,marginTop:24,paddingTop:20,borderTop:"1px solid #dfe7ea",flexWrap:"wrap"}}><button type="button" className="refresh-button" onClick={onClose}>{tr("Cancel")}</button><button type="submit" className="primary-button" style={{padding:"11px 22px",borderRadius:7,background:"#24564e",color:"white",opacity:valid&&!busy?1:0.5}} disabled={!valid||busy}><CheckCircle2 size={18}/> {tr(busy?"Saving...":"Save payment")}</button></div></fieldset></form></div></section>;
+
+}
+
+function PaymentsAnalytics({ kind, data, onRefresh, paymentsReady, apiRequest }) {
+  const [adding,setAdding]=useState(false);
   const isSupplier = kind === "supplier";
   const payments = isSupplier ? data.supplierPayments : data.customerPayments;
   const parties = isSupplier ? data.suppliers : data.customers;
@@ -1939,11 +2079,13 @@ function PaymentsAnalytics({ kind, data, onRefresh }) {
   const safeChartPage = Math.min(chartPage, chartPages);
   const chartRows = filteredCharts.slice((safeChartPage - 1) * 9, safeChartPage * 9);
 
+  if (adding) return <PaymentEntryForm key={kind} kind={kind} data={data} ready={paymentsReady} apiRequest={apiRequest} onRefresh={onRefresh} onClose={()=>setAdding(false)}/>;
   return <>
     <div className="welcome-row"><div>
       <p className="eyebrow">{tr("PAYMENT STATISTICS")}</p><h1>{tr(title)}</h1>
       <p className="muted">{tr("Recorded payments, outstanding account balances and individual payment charts.")}</p>
-    </div><AddRecord page={isSupplier ? "supplierPayments" : "customerPayments"}/></div>
+    </div><button className="refresh-button" disabled={!paymentsReady} onClick={()=>{setAdding(true);window.scrollTo(0,0);}}>{tr(isSupplier ? "Add Supplier Payment" : "Add Customer Payment")}</button></div>
+
     <div className="stats-grid">
       <StatCard label={tr("Total payments")} value={money(enriched.reduce((a, r) => a + number(r.amount), 0))} detail={tr("All recorded payments")} icon={Wallet}/>
       <StatCard label={tr("Payment records")} value={enriched.length} detail={tr("Transactions")} icon={CreditCard}/>
@@ -1961,13 +2103,13 @@ function PaymentsAnalytics({ kind, data, onRefresh }) {
       <div className="search-box" style={{ maxWidth: 360, marginBottom: 16 }}><Search size={17}/>
         <input value={search} onChange={e => {setSearch(e.target.value);setPage(1);}} placeholder={tr("Search payments, names, references...")}/>
       </div>
-      <div className="table-scroll"><table><thead><tr><th>{tr("Date")}</th><th>{isSupplier ? tr("Supplier") : tr("Customer")}</th><th>{tr("Amount")}</th><th>{tr("Reference")}</th>{!isSupplier && <th>{tr("Payment type")}</th>}<th>{tr("Notes")}</th>{!isSupplier && <th>{tr("Receipt")}</th>}</tr></thead>
-        <tbody>{pageRows.map((r) => <tr key={r.id}><td>{dateLabel(r.payment_date)}</td><td>{r.partyName}</td><td>{money(r.amount)}</td><td>{r.invoice_number || r.reference || "—"}</td>{!isSupplier && <td>{r.invoice != null ? tr("Invoice reference") : String(r.reference??"").trim() ? tr("Unmatched") : tr("Services")}</td>}<td>{r.notes || "—"}</td>{!isSupplier && <td><PaymentReceipt record={r}/></td>}</tr>)}</tbody>
+      <div className="table-scroll"><table><thead><tr><th>{tr("Date")}</th><th>{isSupplier ? tr("Supplier") : tr("Customer")}</th><th>{tr("Amount")}</th><th>{tr("Reference")}</th>{!isSupplier && <th>{tr("Payment type")}</th>}<th>{tr("Notes")}</th><th>{tr("Receipt")}</th></tr></thead>
+        <tbody>{pageRows.map((r) => <tr key={r.id}><td>{dateLabel(r.payment_date)}</td><td>{r.partyName}</td><td>{money(r.amount)}</td><td>{r.invoice_number || r.reference || "—"}</td>{!isSupplier && <td>{r.invoice != null ? tr("Invoice reference") : String(r.reference??"").trim() ? tr("Unmatched") : tr("Services")}</td>}<td>{r.notes || "—"}</td><td><PaymentReceipt record={r}/></td></tr>)}</tbody>
       </table></div>
       {!pageRows.length && <div className="empty-state">{tr("No matching payments.")}</div>}
       <PaginationControls page={safePage} totalPages={paymentPages} totalItems={visiblePayments.length} onPageChange={setPage}/>
     </section>
-    {!isSupplier && <CustomerInvoiceRegister data={data}/>}
+    {isSupplier ? <CompanyInvoiceRegister data={data} paymentsReady={paymentsReady}/> : <CustomerInvoiceRegister data={data}/>}
     <section className="panel" style={{ marginTop: 22 }}>
       <div className="panel-heading"><div><p className="eyebrow">{tr("INDIVIDUAL ACCOUNT CHARTS")}</p><h2>{tr(isSupplier ? "Payment performance by supplier" : "Payment performance by customer")}</h2>
         <p className="muted">{tr("Account-level payments and outstanding balances, sorted by total paid.")}</p></div>
@@ -2097,7 +2239,7 @@ function InvoiceAnalytics({ data, onRefresh, paymentsReady, ownership }) {
         <div className="search-box" style={{ maxWidth: 360 }}><Search size={17}/>
           <input value={search} onChange={e => { setSearch(e.target.value); setPage(1); }} placeholder={tr("Search invoices, customers, suppliers, villas...")}/>
         </div>
-        <label>{tr("Customer")} <select value={customerFilter} onChange={e => { setCustomerFilter(e.target.value); setPage(1); }}>
+        <label>{tr("Customer")} <select aria-label={tr("Customer")} className="h-11 min-w-0 cursor-pointer rounded-lg border border-teal-200 bg-white px-4 pr-8 text-sm font-medium text-slate-700 shadow-sm transition-colors hover:border-teal-500 focus:border-teal-600 focus:outline-none focus:ring-2 focus:ring-teal-500/30 disabled:cursor-not-allowed disabled:opacity-60 w-full sm:w-auto sm:min-w-60" value={customerFilter} onChange={e => { setCustomerFilter(e.target.value); setPage(1); }}>
           <option value="">{tr("All customers")}</option>
           {customerOptions.map(c => <option key={c.id} value={String(c.id)}>{resolveName(c.id,data.customers)}</option>)}
         </select></label>
@@ -2262,7 +2404,7 @@ function WeeklyOperationsPage({ kind, token, villas }) {
   useEffect(() => {
     if (!notice) return undefined;
     const timer = window.setTimeout(() => setNotice(""), 6500);
-    return () => window.clearTimeout(timer);
+  return () => window.clearTimeout(timer);
   }, [notice]);
   const [needsSearch, setNeedsSearch] = useState("");
   const [checkedSearch, setCheckedSearch] = useState("");
@@ -2286,7 +2428,7 @@ function WeeklyOperationsPage({ kind, token, villas }) {
       ...options,
       headers: {
         Authorization: `Bearer ${token}`,
-        ...(options.body ? { "Content-Type": "application/json" } : {}),
+        ...(options.body && !(options.body instanceof FormData) ? { "Content-Type": "application/json" } : {}),
       },
     });
     if (!response.ok) {
@@ -2539,21 +2681,10 @@ function WeeklyOperationsPage({ kind, token, villas }) {
     {loading && <p className="muted">{tr("Loading inspection status...")}</p>}
     {statusTable(missingFiltered, needsSearch, setNeedsSearch, missingSafePage, setNeedsPage, true)}
     {statusTable(checkedFiltered, checkedSearch, setCheckedSearch, checkedSafePage, setCheckedPage, false)}
-    <section id="weekly-record-form" className="panel" style={{ marginTop: 24, overflow: "hidden" }}>
-      <div style={{ padding: "4px 0 20px", borderBottom: "1px solid #e8e5db", marginBottom: 24 }}>
-        <p className="eyebrow">PROPERTY OPERATIONS / NEW ENTRY</p>
-        <div style={{ display: "flex", alignItems: "center", gap: 13, marginTop: 7 }}>
-          <span style={{ display: "grid", placeItems: "center", width: 46, height: 46, borderRadius: 13, background: "#edf2ec", color: "#54745e" }}>
-            {isWater ? <Droplets size={23} /> : <ClipboardCheck size={23} />}
-          </span>
-          <div>
-            <h2 style={{ margin: 0, fontSize: 23, color: "#35483b" }}>Record {isWater ? tr("water measurement") : tr("house check")}</h2>
-            <p className="muted" style={{ margin: "5px 0 0", fontSize: 13 }}>Complete the details below to update the villa's weekly compliance status.</p>
-          </div>
-        </div>
-      </div>
-      <form onSubmit={submit} style={{ display: "grid", gap: 24 }}>
-        <div style={{ border: "1px solid #e9e8e0", borderRadius: 15, padding: "22px", background: "#fffefa" }}>
+    <section id="weekly-record-form" style={{marginTop:24,border:"1px solid #dbe5e7",borderRadius:16,overflow:"hidden",background:"#f8fafb",boxShadow:"0 12px 36px #123b4612"}}>
+      <EntryHeader title={isWater?"Add Measurement":"Add House Check"} Icon={isWater?Droplets:ClipboardCheck}/>
+      <form onSubmit={submit} style={{ display: "grid", gap: 24,padding:"clamp(16px,3vw,30px)" }}>
+        <div style={{ border: "1px solid #dfe7ea", borderRadius: 15, padding: "22px", background: "#fff" }}>
           <div style={{ marginBottom: 19 }}>
             <p className="eyebrow" style={{ marginBottom: 5 }}>01 / PROPERTY & VISIT</p>
             <h3 style={{ margin: 0, fontSize: 17, color: "#3e5143" }}>Visit information</h3>
@@ -2561,7 +2692,7 @@ function WeeklyOperationsPage({ kind, token, villas }) {
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(230px, 1fr))", gap: 18 }}>
             <label style={operationLabelStyle}>{tr("Villa")} <span style={{ color: "#b55d53" }}>*</span>
-              <select required value={selectedHouse} onChange={(e) => { setSelectedHouse(e.target.value); setForm((prev) => ({ ...prev, tank: "" })); }} style={operationInputStyle}>
+              <select className="h-11 w-full min-w-0 cursor-pointer rounded-lg border border-teal-200 bg-white px-4 pr-8 text-sm font-medium text-slate-700 shadow-sm transition-colors hover:border-teal-500 focus:border-teal-600 focus:outline-none focus:ring-2 focus:ring-teal-500/30 disabled:cursor-not-allowed disabled:opacity-60" required value={selectedHouse} onChange={(e) => { setSelectedHouse(e.target.value); setForm((prev) => ({ ...prev, tank: "" })); }}>
                 <option value="">{tr("Select a villa")}</option>{villas.map((v) => <option key={v.id} value={v.id}>{v.name}</option>)}
               </select>
             </label>
@@ -2573,7 +2704,7 @@ function WeeklyOperationsPage({ kind, token, villas }) {
             </label>
           </div>
         </div>
-        <div style={{ border: "1px solid #e9e8e0", borderRadius: 15, padding: 22, background: "#fffefa" }}>
+        <div style={{ border: "1px solid #dfe7ea", borderRadius: 15, padding: 22, background: "#fff" }}>
           <div style={{ marginBottom: 18 }}>
             <p className="eyebrow" style={{ marginBottom: 5 }}>02 / {isWater ? "MEASUREMENT" : "PROPERTY CONDITION"}</p>
             <h3 style={{ margin: 0, fontSize: 17, color: "#3e5143" }}>{isWater ? "Water measurement details" : "Inspection assessment"}</h3>
@@ -2608,13 +2739,13 @@ function WeeklyOperationsPage({ kind, token, villas }) {
               </label>}
               {(form.method === "tank" || form.method === "both") && <>
                 <label style={operationLabelStyle}>Water tank <span style={{ color: "#b55d53" }}>*</span>
-                  <select required value={form.tank} onChange={(e) => setForm((p) => ({ ...p, tank: e.target.value }))} style={operationInputStyle}>
+                  <select className="h-11 w-full min-w-0 cursor-pointer rounded-lg border border-teal-200 bg-white px-4 pr-8 text-sm font-medium text-slate-700 shadow-sm transition-colors hover:border-teal-500 focus:border-teal-600 focus:outline-none focus:ring-2 focus:ring-teal-500/30 disabled:cursor-not-allowed disabled:opacity-60" required value={form.tank} onChange={(e) => setForm((p) => ({ ...p, tank: e.target.value }))}>
                     <option value="">{tr("Select a water tank")}</option>{houseTanks.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
                   </select>
                   {!houseTanks.length && <span style={{ ...operationHelpStyle, color: "#ad5751" }}>No tank is configured for this villa. Add one in Django Admin.</span>}
                 </label>
                 <label style={operationLabelStyle}>Visual tank level <span style={{ color: "#b55d53" }}>*</span>
-                  <select value={form.visual_level} onChange={(e) => setForm((p) => ({ ...p, visual_level: e.target.value }))} style={operationInputStyle}>
+                  <select className="h-11 w-full min-w-0 cursor-pointer rounded-lg border border-teal-200 bg-white px-4 pr-8 text-sm font-medium text-slate-700 shadow-sm transition-colors hover:border-teal-500 focus:border-teal-600 focus:outline-none focus:ring-2 focus:ring-teal-500/30 disabled:cursor-not-allowed disabled:opacity-60" value={form.visual_level} onChange={(e) => setForm((p) => ({ ...p, visual_level: e.target.value }))}>
                     <option value="full">Full (100%)</option><option value="three_quarters">Three quarters (75%)</option><option value="half">Half (50%)</option><option value="quarter">Quarter (25%)</option><option value="nearly_empty">Nearly empty</option><option value="empty">Empty (0%)</option><option value="unknown">Unable to determine</option>
                   </select>
                 </label>
@@ -2622,7 +2753,7 @@ function WeeklyOperationsPage({ kind, token, villas }) {
             </div>
           </>}
         </div>
-        <div style={{ border: "1px solid #e9e8e0", borderRadius: 15, padding: 22, background: "#fffefa" }}>
+        <div style={{ border: "1px solid #dfe7ea", borderRadius: 15, padding: 22, background: "#fff" }}>
           <p className="eyebrow" style={{ marginBottom: 5 }}>03 / ADDITIONAL INFORMATION</p>
           <h3 style={{ margin: "0 0 16px", fontSize: 17, color: "#3e5143" }}>Notes & observations</h3>
           <label style={operationLabelStyle}>{isWater ? "Water measurement notes" : "Inspection notes"} <span style={{ color: "#8b938c", fontWeight: 400 }}>(optional)</span>
@@ -2786,8 +2917,8 @@ function ImportantJobsPage({ token, customers }) {
     <div className="welcome-row"><div><p className="eyebrow">{tr("OPERATIONS / DEADLINES")}</p><h1>{tr("Important Jobs")}</h1><p className="muted">{tr("Plan ahead, track urgency and complete your duties.")}</p></div><div style={{display:'flex',gap:8,flexWrap:'wrap'}}><button className="refresh-button" disabled={loading || busy} onClick={()=>setRevision(v=>v+1)}><RefreshCw size={16}/> {tr("Refresh")}</button><button className="primary-button" disabled={busy} onClick={()=>setEditing({...blank})}>{"+ " + tr("Add Job")}</button></div></div>
     {error && <div className="error-banner" role="alert">{error}</div>}
     <div className="stats-grid"><StatCard label={tr("Pending jobs")} value={pending.length} detail={tr("All open duties")} icon={ClipboardList}/><StatCard label={tr("Critical / overdue")} value={pending.filter(j=>['critical','overdue'].includes(j.importance)).length} detail={tr("Immediate attention")} icon={CircleAlert}/><StatCard label="Email threshold reached" value={pending.filter(j=>j.email_required).length} detail="Within 1.5 × procedure days" icon={Bell}/><StatCard label={tr("Completed")} value={completed.length} detail={tr("Job history")} icon={ClipboardCheck}/></div>
-    <section className="panel" style={{marginTop:20}}><div className="panel-heading"><div><p className="eyebrow">PRIORITY DISTRIBUTION</p><h2>Pending workload</h2></div></div>{pending.length ? <div style={{height:240}}><ResponsiveContainer width="100%" height="100%"><BarChart data={chart}><CartesianGrid vertical={false} strokeDasharray="3 3"/><XAxis dataKey="label" tick={{fontSize:11}}/><YAxis allowDecimals={false}/><Tooltip/><Bar dataKey="value" name="Jobs" radius={[6,6,0,0]} maxBarSize={55}>{chart.map(l=><Cell key={l.key} fill={l.color}/>)}</Bar></BarChart></ResponsiveContainer></div> : <p className="muted">No pending jobs to chart.</p>}</section>
-    {editing && <form className="panel" style={{marginTop:20}} onSubmit={e=>{e.preventDefault();mutate(editing.id?`${endpoint}${editing.id}/`:endpoint,{customer:editing.customer,description:editing.description,deadline:editing.deadline,procedure_days:Number(editing.procedure_days)},editing.id?'PATCH':'POST');}}><h2>{editing.id?tr("Edit job"):tr("New job")}</h2><div style={{display:'grid',gap:12,gridTemplateColumns:'repeat(auto-fit,minmax(180px,1fr))'}}><label>{tr("Customer")}<select required style={field} value={editing.customer} onChange={e=>setEditing({...editing,customer:e.target.value})}><option value="">{tr("Select customer")}</option>{customers.map(c=><option key={c.id} value={c.id}>{c.name || c.full_name || `Customer #${c.id}`}</option>)}</select></label><label>{tr("Deadline")}<input required type="date" style={field} value={editing.deadline} onChange={e=>setEditing({...editing,deadline:e.target.value})}/></label><label>{tr("Procedure days")}<input required type="number" min="1" step="1" style={field} value={editing.procedure_days} onChange={e=>setEditing({...editing,procedure_days:e.target.value})}/></label></div><label style={{display:'block',marginTop:12}}>{tr("Description")}<textarea required rows={3} style={field} value={editing.description} onChange={e=>setEditing({...editing,description:e.target.value})}/></label><div style={{display:'flex',gap:8,marginTop:12}}><button className="primary-button" disabled={busy}>{tr("Save job")}</button><button type="button" className="refresh-button" disabled={busy} onClick={()=>setEditing(null)}>{tr("Cancel")}</button></div></form>}
+    <section className="panel" style={{marginTop:20}}><div className="panel-heading"><div><p className="eyebrow">PRIORITY DISTRIBUTION</p><h2>Pending workload</h2></div></div>{pending.length ? <div style={{height:240}}><ResponsiveContainer width="100%" height="100%"><BarChart data={chart}><CartesianGrid vertical={false} strokeDasharray="3 3"/><XAxis dataKey="label" tick={{fontSize:11}}/><YAxis allowDecimals={false}/><Tooltip/><Bar dataKey="value" name="Jobs" radius={[8, 8, 2, 2]} maxBarSize={55}>{chart.map(l=><Cell key={l.key} fill={l.color}/>)}</Bar></BarChart></ResponsiveContainer></div> : <p className="muted">No pending jobs to chart.</p>}</section>
+    {editing && <form className="panel" style={{marginTop:20,borderRadius:16,overflow:"hidden",padding:24,background:"#f8fafb"}} onSubmit={e=>{e.preventDefault();mutate(editing.id?`${endpoint}${editing.id}/`:endpoint,{customer:editing.customer,description:editing.description,deadline:editing.deadline,procedure_days:Number(editing.procedure_days)},editing.id?'PATCH':'POST');}}><EntryHeader title={editing.id?"Edit job":"New job"} Icon={Bell}/><div style={{height:20}}/><div style={{display:'grid',gap:12,gridTemplateColumns:'repeat(auto-fit,minmax(180px,1fr))'}}><label>{tr("Customer")}<select required className="h-11 min-w-0 cursor-pointer rounded-lg border border-teal-200 bg-white px-4 pr-8 text-sm font-medium text-slate-700 shadow-sm transition-colors hover:border-teal-500 focus:border-teal-600 focus:outline-none focus:ring-2 focus:ring-teal-500/30 disabled:cursor-not-allowed disabled:opacity-60 w-full" value={editing.customer} onChange={e=>setEditing({...editing,customer:e.target.value})}><option value="">{tr("Select customer")}</option>{customers.map(c=><option key={c.id} value={c.id}>{c.name || c.full_name || `Customer #${c.id}`}</option>)}</select></label><label>{tr("Deadline")}<input required type="date" style={field} value={editing.deadline} onChange={e=>setEditing({...editing,deadline:e.target.value})}/></label><label>{tr("Procedure days")}<input required type="number" min="1" step="1" style={field} value={editing.procedure_days} onChange={e=>setEditing({...editing,procedure_days:e.target.value})}/></label></div><label style={{display:'block',marginTop:12}}>{tr("Description")}<textarea required rows={3} style={field} value={editing.description} onChange={e=>setEditing({...editing,description:e.target.value})}/></label><div style={{display:'flex',gap:8,marginTop:12}}><button className="primary-button" disabled={busy}>{tr("Save job")}</button><button type="button" className="refresh-button" disabled={busy} onClick={()=>setEditing(null)}>{tr("Cancel")}</button></div></form>}
     <section className="panel" style={{marginTop:20}}><div className="panel-heading" style={{flexWrap:'wrap'}}><div><p className="eyebrow">{tr("JOB REGISTER")}</p><h2>{tab==='pending'?tr("Pending duties"):tr("Completed duties")}</h2></div><div style={{display:'flex',gap:8}}>{['pending','completed'].map(t=><button key={t} className={tab===t?'primary-button':'refresh-button'} aria-pressed={tab===t} onClick={()=>setTab(t)}>{t==='pending'?`Pending (${pending.length})`:`Completed (${completed.length})`}</button>)}</div></div><div className="search-box" style={{maxWidth:360,marginBottom:16}}><Search size={17}/><input aria-label="Search jobs" placeholder={tr("Search customer or job...")} value={search} onChange={e=>setSearch(e.target.value)}/></div>
     {loading && <p className="muted">Loading reminders…</p>}{!loading && !error && !visible.length && <div className="empty-state">{tr("No matching jobs.")}</div>}
     <div style={{display:'grid',gap:14}}>{visible.map(j=>{const l=j.completed?{label:'Completed',color:'#64748b'}:levelFor(j); const remaining=Number(j.days_remaining); const duration=Number(j.procedure_days); const pct=Math.max(0,Math.min(100,remaining/(duration*1.5)*100)); return <article key={j.id} style={{border:'1px solid #e4e7df',borderLeft:`5px solid ${l.color}`,borderRadius:12,padding:18,background:'rgba(255,255,255,.65)'}}><div style={{display:'flex',justifyContent:'space-between',gap:12,flexWrap:'wrap'}}><strong style={{fontSize:17,color:'#3f493f'}}>{j.customer_name}</strong><strong style={{color:l.color,fontSize:13}}>{tr(l.label.toUpperCase())}</strong></div><p style={{whiteSpace:'pre-wrap',overflowWrap:'anywhere',margin:'10px 0 16px'}}>{j.description}</p><div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(130px,1fr))',gap:12}}>{[['Deadline',dateLabel(j.deadline)],['Procedure',`${duration} days`],['Recommended start',dateLabel(j.recommended_start_date)],['Latest start',dateLabel(j.latest_start_date)],...(j.completed?[['Completed',dateLabel(j.completed_at)]]:[['Time remaining',remaining<0?`${-remaining} days overdue`:`${remaining} days`],['Spare days',j.spare_days]])].map(([label,value])=><div key={label}><div className="muted" style={{fontSize:12}}>{tr(label)}</div><strong>{value}</strong></div>)}</div>{!j.completed && <div style={{marginTop:16}}><div className="muted" style={{fontSize:12,marginBottom:6}}>Time remaining relative to notification window ({duration*1.5} days)</div><div role="progressbar" aria-label="Remaining notification window" aria-valuenow={Math.round(pct)} style={{height:8,background:'#e6e9e2',borderRadius:8,overflow:'hidden'}}><div style={{width:`${pct}%`,height:'100%',background:l.color}}/></div><p className="muted" style={{fontSize:12}}>{j.last_notification_at?`Last email: ${dateLabel(j.last_notification_at)} (${j.last_notification_level})`:j.email_required?'Email threshold reached — awaiting scheduled check':'Email threshold not reached'}</p></div>}<div style={{display:'flex',gap:8,flexWrap:'wrap',marginTop:12}}><button className="refresh-button" disabled={busy} onClick={()=>setEditing({...j})}>{tr("Edit")}</button><button className="primary-button" disabled={busy} onClick={()=>mutate(`${endpoint}${j.id}/${j.completed?'reopen':'complete'}/`)}><ClipboardCheck size={16}/>{j.completed?tr("Reopen job"):tr("Mark completed")}</button></div></article>})}</div></section>
@@ -2842,16 +2973,16 @@ function CompanyGasPage({ token, employees }) {
   const total = filtered.reduce((s,r)=>s+r.amount,0);
   const pages = Math.max(1,Math.ceil(filtered.length/pageSize)), safePage=Math.min(page,pages);
   const field={padding:'10px 12px',border:'1px solid #d9e2d9',borderRadius:8,maxWidth:'100%'};
-  const chart = (items, horizontal=false) => items.length ? <div style={{height:horizontal?Math.max(220,items.length*42+45):270,width:'100%'}}><ResponsiveContainer width="100%" height="100%"><BarChart data={items} layout={horizontal?'vertical':'horizontal'} margin={{top:10,right:20,left:horizontal?12:0,bottom:12}}><CartesianGrid strokeDasharray="3 3" vertical={horizontal} horizontal={!horizontal}/>{horizontal?<><XAxis type="number" tickFormatter={v=>`€${v}`}/><YAxis type="category" dataKey="name" width={145} tick={{fontSize:11}}/></>:<><XAxis dataKey="name" tick={{fontSize:11}}/><YAxis tickFormatter={v=>`€${v}`}/></>}<Tooltip formatter={v=>money(v)}/><Bar dataKey="amount" name="Fuel expense" fill={horizontal?'#718477':'#b99b65'} maxBarSize={45} radius={horizontal?[0,5,5,0]:[5,5,0,0]}/></BarChart></ResponsiveContainer></div>:<div className="empty-state">No fuel expenses to chart.</div>;
+  const chart = (items, horizontal=false) => items.length ? <div style={{height:horizontal?Math.max(220,items.length*42+45):270,width:'100%'}}><ResponsiveContainer width="100%" height="100%"><BarChart data={items} layout={horizontal?'vertical':'horizontal'} margin={{top:10,right:20,left:horizontal?12:0,bottom:12}}><CartesianGrid strokeDasharray="3 3" vertical={horizontal} horizontal={!horizontal}/>{horizontal?<><XAxis type="number" tickFormatter={v=>`€${v}`}/><YAxis type="category" dataKey="name" width={145} tick={{fontSize:11}}/></>:<><XAxis dataKey="name" tick={{fontSize:11}}/><YAxis tickFormatter={v=>`€${v}`}/></>}<Tooltip formatter={v=>money(v)}/><Bar dataKey="amount" name="Fuel expense" fill={horizontal?'#238878':'#c49a49'} maxBarSize={45} radius={horizontal?[2,8,8,2]:[8,8,2,2]}/></BarChart></ResponsiveContainer></div>:<div className="empty-state">No fuel expenses to chart.</div>;
   return <>
     <div className="welcome-row"><div><p className="eyebrow">{tr("COMPANY EXPENSES / FUEL")}</p><h1>{tr("Company Gas")}</h1><p className="muted">{tr("Fuel expenses paid by the company for employees.")}</p></div><AddRecord page="companyGas"/></div>
     {error && <div className="error-message" role="alert">{error}</div>}
     {loading && <p className="muted">Loading fuel records…</p>}
     {!loading && !error && <>
-    <section className="panel" style={{marginBottom:20}}><div style={{display:'flex',gap:12,flexWrap:'wrap',alignItems:'end'}}><label>{tr("Month")}<br/><input type="month" style={field} value={month} onChange={e=>{setMonth(e.target.value);setPage(1);}}/></label><label>{tr("Employee")}<br/><select style={field} value={employee} onChange={e=>{setEmployee(e.target.value);setPage(1);}}><option value="">{tr("All employees")}</option>{[...new Map(rows.map(r=>[r.employeeId,r.employeeLabel]))].sort((a,b)=>a[1].localeCompare(b[1])).map(([id,name])=><option key={id} value={id}>{name}</option>)}</select></label><label>{tr("Fuel type")}<br/><select style={field} value={fuel} onChange={e=>{setFuel(e.target.value);setPage(1);}}><option value="">{tr("All fuels")}</option>{Object.entries(types).map(([k,v])=><option key={k} value={k}>{v}</option>)}</select></label><button className="refresh-button" onClick={()=>{setMonth('');setEmployee('');setFuel('');setSearch('');setPage(1);}}>{tr("Clear filters")}</button></div></section>
+    <section className="panel" style={{marginBottom:20}}><div style={{display:'flex',gap:12,flexWrap:'wrap',alignItems:'end'}}><label>{tr("Month")}<br/><input type="month" style={field} value={month} onChange={e=>{setMonth(e.target.value);setPage(1);}}/></label><label>{tr("Employee")}<br/><select className="h-11 min-w-0 cursor-pointer rounded-lg border border-teal-200 bg-white px-4 pr-8 text-sm font-medium text-slate-700 shadow-sm transition-colors hover:border-teal-500 focus:border-teal-600 focus:outline-none focus:ring-2 focus:ring-teal-500/30 disabled:cursor-not-allowed disabled:opacity-60 w-full sm:w-auto sm:min-w-44" value={employee} onChange={e=>{setEmployee(e.target.value);setPage(1);}}><option value="">{tr("All employees")}</option>{[...new Map(rows.map(r=>[r.employeeId,r.employeeLabel]))].sort((a,b)=>a[1].localeCompare(b[1])).map(([id,name])=><option key={id} value={id}>{name}</option>)}</select></label><label>{tr("Fuel type")}<br/><select className="h-11 min-w-0 cursor-pointer rounded-lg border border-teal-200 bg-white px-4 pr-8 text-sm font-medium text-slate-700 shadow-sm transition-colors hover:border-teal-500 focus:border-teal-600 focus:outline-none focus:ring-2 focus:ring-teal-500/30 disabled:cursor-not-allowed disabled:opacity-60 w-full sm:w-auto sm:min-w-44" value={fuel} onChange={e=>{setFuel(e.target.value);setPage(1);}}><option value="">{tr("All fuels")}</option>{Object.entries(types).map(([k,v])=><option key={k} value={k}>{v}</option>)}</select></label><button className="refresh-button" onClick={()=>{setMonth('');setEmployee('');setFuel('');setSearch('');setPage(1);}}>{tr("Clear filters")}</button></div></section>
     <div className="stats-grid"><StatCard label="Total fuel cost" value={money(total)} detail="Selected records" icon={Wallet}/><StatCard label="Fuel purchases" value={filtered.length} detail="Recorded transactions" icon={Truck}/><StatCard label={tr("Employees")} value={new Set(filtered.map(r=>r.employeeId)).size} detail="With fuel expenses" icon={Users}/><StatCard label="Average purchase" value={money(filtered.length?total/filtered.length:0)} detail="Cost per transaction" icon={CreditCard}/></div>
     <section className="panel" style={{marginTop:20}}><div className="panel-heading"><div><p className="eyebrow">MONTHLY TREND</p><h2>Fuel expenses by month</h2></div></div>{chart(monthly)}</section>
-    <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(min(100%,340px),1fr))',gap:18,marginTop:20}}><section className="panel" style={{minWidth:0}}><h2>Cost by employee</h2>{chart(byEmployee,true)}</section><section className="panel" style={{minWidth:0}}><h2>Fuel type distribution</h2>{total>0?<div style={{height:300}}><ResponsiveContainer width="100%" height="100%"><PieChart><Pie data={byFuel} dataKey="amount" nameKey="name" innerRadius="45%" outerRadius="75%" label={({percent})=>`${Math.round(percent*100)}%`}>{byFuel.map((r,i)=><Cell key={r.name} fill={colors[i%colors.length]}/>)}</Pie><Tooltip formatter={v=>money(v)}/><Legend/></PieChart></ResponsiveContainer></div>:<div className="empty-state">No positive expenses to chart.</div>}</section></div>
+    <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(min(100%,340px),1fr))',gap:18,marginTop:20}}><section className="panel" style={{minWidth:0}}><h2>Cost by employee</h2>{chart(byEmployee,true)}</section><section className="panel" style={{minWidth:0}}><h2>Fuel type distribution</h2>{total>0?<div style={{height:300}}><ResponsiveContainer width="100%" height="100%"><PieChart><Pie cornerRadius={5} data={byFuel} dataKey="amount" nameKey="name" innerRadius="45%" outerRadius="75%" label={({percent})=>`${Math.round(percent*100)}%`}>{byFuel.map((r,i)=><Cell key={r.name} fill={colors[i%colors.length]}/>)}</Pie><Tooltip formatter={v=>money(v)}/><Legend/></PieChart></ResponsiveContainer></div>:<div className="empty-state">No positive expenses to chart.</div>}</section></div>
     <div style={{marginTop:20}}>
       <DataTable title="Fuel expense records"
         rows={filtered.slice((safePage-1)*pageSize,safePage*pageSize)}
@@ -2860,7 +2991,7 @@ function CompanyGasPage({ token, employees }) {
         onSearchChange={v=>{setSearch(v);setPage(1);}}
         searchPlaceholder="Search employee, department, fuel, amount, date..."
         emptyMessage="No matching fuel expenses."
-        headerActions={<label style={{display:'flex',alignItems:'center',gap:8}}>{tr("Rows per page")} <select style={field} value={pageSize} onChange={e=>{setPageSize(Number(e.target.value));setPage(1);}}>{[10,25,50,100].map(n=><option key={n} value={n}>{n}</option>)}</select></label>}
+        headerActions={<label style={{display:'flex',alignItems:'center',gap:8}}>{tr("Rows per page")} <select className="h-11 min-w-0 cursor-pointer rounded-lg border border-teal-200 bg-white px-4 pr-8 text-sm font-medium text-slate-700 shadow-sm transition-colors hover:border-teal-500 focus:border-teal-600 focus:outline-none focus:ring-2 focus:ring-teal-500/30 disabled:cursor-not-allowed disabled:opacity-60 w-full sm:w-auto sm:min-w-44" value={pageSize} onChange={e=>{setPageSize(Number(e.target.value));setPage(1);}}>{[10,25,50,100].map(n=><option key={n} value={n}>{n}</option>)}</select></label>}
         columns={[
           {label:'Date',render:r=>dateLabel(r.date)},
           {label:'Employee',key:'employeeLabel'},
@@ -2874,7 +3005,7 @@ function CompanyGasPage({ token, employees }) {
             try { url = new URL(r.invoice_pdf, new URL(API_URL, window.location.origin).origin + '/'); }
             catch { return 'Invalid invoice link'; }
             if (!['http:','https:'].includes(url.protocol)) return 'Invalid invoice link';
-            return <a className="refresh-button" style={{display:'inline-flex',alignItems:'center',gap:6,textDecoration:'none',whiteSpace:'nowrap'}} href={url.href} target="_blank" rel="noopener noreferrer">{tr("Open PDF ↗")}</a>;
+            return <a className="refresh-button text-white! hover:text-white! visited:text-white!" style={{display:'inline-flex',alignItems:'center',gap:6,textDecoration:'none',whiteSpace:'nowrap'}} href={url.href} target="_blank" rel="noopener noreferrer">{tr("Open PDF ↗")}</a>;
           }}
         ]}/>
       <div style={{padding:'12px 4px',display:'flex',justifyContent:'space-between',flexWrap:'wrap',gap:8}}>
@@ -2896,6 +3027,7 @@ export default function App() {
   );
 
   const [activePage, setActivePage] = useState("overview");
+  const [entryPage,setEntryPage]=useState(null);
   const [data, setData] = useState(emptyData);
   const [loading, setLoading] = useState(false);
   const [loginLoading, setLoginLoading] = useState(false);
@@ -2906,6 +3038,7 @@ export default function App() {
   const [recentWorkPage, setRecentWorkPage] = useState(1);
   const [recentWorkSort, setRecentWorkSort] = useState("created_at");
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sidebarCompact,setSidebarCompact] = useState(false);
   const [overviewExporting, setOverviewExporting] = useState(false);
 
   // Controls which chart is displayed.
@@ -2943,7 +3076,7 @@ export default function App() {
     const response = await fetch(requestUrl, {
       ...options,
       headers: {
-        ...(options.body ? { "Content-Type": "application/json" } : {}),
+        ...(options.body && !(options.body instanceof FormData) ? { "Content-Type": "application/json" } : {}),
         ...(accessToken
           ? { Authorization: `Bearer ${accessToken}` }
           : {}),
@@ -3493,7 +3626,8 @@ export default function App() {
       : pageInfo[activePage];
 
   return (
-    <div className="app-shell">
+    <div className={`app-shell ${sidebarCompact ? "compact" : ""}`} >
+      <Toaster position="bottom-right" richColors closeButton />
       {sidebarOpen && (
         <button
           className="mobile-overlay"
@@ -3504,12 +3638,15 @@ export default function App() {
 
       <aside className={`sidebar ${sidebarOpen ? "sidebar-open" : ""}`}>
         <div className="brand">
-          <div className="brand-mark">PK</div>
-
-          <div>
-            <div className="brand-name">PAROS KATOIKIA</div>
-            <div className="brand-caption">VILLA MANAGEMENT</div>
-          </div>
+          <button type="button" className="brand-home" title={tr("Overview")} aria-label={`PAROS KATOIKIA — ${tr("Overview")}`} aria-current={activePage === "overview" && !entryPage ? "page" : undefined} onClick={() => {
+            setEntryPage(null); setActivePage("overview"); setSidebarOpen(false);
+          }}>
+            <span className="brand-mark">PK</span>
+            <span className="brand-home-text">
+              <span className="brand-name">PAROS KATOIKIA</span>
+              <span className="brand-caption">VILLA MANAGEMENT</span>
+            </span>
+          </button>
 
           <button
             className="close-sidebar"
@@ -3520,15 +3657,14 @@ export default function App() {
           </button>
         </div>
 
-        <div className="nav-caption">WORKSPACE</div>
 
         <nav className="side-nav">
           {navigation.map(({ id, label, icon: Icon, group }) => (
             <div key={id}>{group && <div className="nav-caption">{tr(group)}</div>}<button
               key={id}
-              className={`nav-item ${activePage === id ? "active" : ""}`}
+              title={tr(label)} aria-label={tr(label)} aria-current={activePage === id ? "page" : undefined} className={`nav-item ${activePage === id ? "active" : ""}`}
               onClick={() => {
-                setActivePage(id);
+                setEntryPage(null); setActivePage(id);
                 setSidebarOpen(false);
               }}
             >
@@ -3561,21 +3697,14 @@ export default function App() {
             <Menu />
           </button>
 
+          <button type="button" className="desktop-collapse icon-button" aria-label="Toggle sidebar" aria-expanded={!sidebarCompact} onClick={()=>setSidebarCompact(v=>!v)}><Menu size={20}/></button>
           <div className="topbar-title">
             Paros <span>/</span>{" "}
             {tr(navigation.find(item => item.id === activePage)?.label || "Overview")}
           </div>
 
           <div className="topbar-actions">
-            <button type="button" className="icon-button" title={language === "el" ? "English" : "Ελληνικά"} aria-label={language === "el" ? "English" : "Ελληνικά"} onClick={() => setLanguage(v => v === "el" ? "en" : "el")}>{language === "el" ? "🇬🇧 EN" : "🇬🇷 EL"}</button>
-            {activePage !== "workEntries" && <div className="search-box">
-              <Search size={17} />
-              <input
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder={tr("Search work entries...")}
-              />
-            </div>}
+            <button type="button" className="icon-button" title={language === "el" ? "English" : "Ελληνικά"} aria-label={language === "el" ? "English" : "Ελληνικά"} onClick={() => setLanguage(v => v === "el" ? "en" : "el")}><svg width="30" height="20" viewBox="0 0 30 20" aria-hidden="true" style={{display:"block",borderRadius:3,boxShadow:"0 1px 5px #123b4633"}}>{language === "el" ? <><rect width="30" height="20" fill="#012169"/><path d="M0 0L30 20M30 0L0 20" stroke="#fff" strokeWidth="5"/><path d="M0 0L30 20M30 0L0 20" stroke="#C8102E" strokeWidth="2"/><path d="M15 0V20M0 10H30" stroke="#fff" strokeWidth="7"/><path d="M15 0V20M0 10H30" stroke="#C8102E" strokeWidth="4"/></> : <><rect width="30" height="20" fill="#fff"/>{[0,2,4,6,8].map(i => <rect key={i} x="0" y={i*20/9} width="30" height={20/9} fill="#0D5EAF"/>)}<rect width={100/9} height={100/9} fill="#0D5EAF"/><path d="M0 5.5556H11.1111M5.5556 0V11.1111" stroke="#fff" strokeWidth={20/9}/></>}</svg></button>
 
             <button
               className="icon-button"
@@ -3595,7 +3724,7 @@ export default function App() {
           </div>
         </header>
 
-        <div className="page-content">
+        <EntryContext.Provider value={setEntryPage}><div className="page-content">
           {error && (
             <div className="error-banner">
               <CircleAlert size={18} />
@@ -3626,7 +3755,7 @@ export default function App() {
             </div>
           )}
 
-          {activePage === "companyGas" ? (
+          {entryPage ? <RecordEntry key={entryPage} page={entryPage} data={data} apiRequest={apiRequest} onClose={()=>setEntryPage(null)} onSaved={loadDashboard}/> : activePage === "companyGas" ? (
             <CompanyGasPage token={token} employees={data.employees} />
           ) : activePage === "importantJobs" ? (
             <ImportantJobsPage token={token} customers={data.customers} />
@@ -3642,6 +3771,9 @@ export default function App() {
             <InvoiceAnalytics key={activePage} ownership={activePage === "companyInvoices" ? "company" : undefined} data={data} onRefresh={loadDashboard} paymentsReady={!loading && !endpointErrors.some(e => ["customerPayments", "supplierPayments", "villas", "invoices"].includes(e.key))} />
           ) : activePage === "customerPayments" || activePage === "supplierPayments" ? (
             <PaymentsAnalytics
+              key={activePage}
+              apiRequest={apiRequest}
+              paymentsReady={!loading && !endpointErrors.some(e => (activePage === "supplierPayments" ? ["supplierPayments", "invoices", "suppliers"] : ["customerPayments", "invoices", "customers", "villas"]).includes(e.key))}
               kind={activePage === "supplierPayments" ? "supplier" : "customer"}
               data={data}
               onRefresh={loadDashboard}
@@ -3842,7 +3974,7 @@ export default function App() {
                     <div className="chart-wrap" style={{ position: "relative" }}>
                       <ResponsiveContainer width="100%" height="100%">
                         <PieChart>
-                          <Pie
+                          <Pie cornerRadius={5}
                             data={[
                               { name: "Gross profit", value: Math.max(0, totals.grossProfit) },
                               { name: "Company costs", value: Math.max(0, totals.costs) },
@@ -3856,8 +3988,8 @@ export default function App() {
                             paddingAngle={3}
                             stroke="none"
                           >
-                            <Cell fill="#3977b8" />
-                            <Cell fill="#c85b55" />
+                            <Cell fill="#187e91" />
+                            <Cell fill="#c65e61" />
                           </Pie>
                           <Tooltip formatter={(value) => money(value)} />
                           <Legend
@@ -3926,16 +4058,16 @@ export default function App() {
                             <Bar
                               dataKey="revenue"
                               name="Total revenue"
-                              fill="#b99b65"
-                              radius={[4, 4, 0, 0]}
+                              fill="#c49a49"
+                              radius={[8, 8, 2, 2]}
                               maxBarSize={36}
                             />
 
                             <Bar
                               dataKey="grossMargin"
                               name={tr("Gross margin")}
-                              fill="#718477"
-                              radius={[4, 4, 0, 0]}
+                              fill="#238878"
+                              radius={[8, 8, 2, 2]}
                               maxBarSize={36}
                             />
                           </BarChart>
@@ -3979,32 +4111,32 @@ export default function App() {
                           <Bar
                             dataKey="income"
                             name={tr("Revenue")}
-                            fill="#b99b65"
-                            radius={[4, 4, 0, 0]}
+                            fill="#c49a49"
+                            radius={[8, 8, 2, 2]}
                             maxBarSize={36}
                           />
 
                           <Bar
                             dataKey="outcome"
                             name={tr("Expenses")}
-                            fill="#718477"
-                            radius={[4, 4, 0, 0]}
+                            fill="#238878"
+                            radius={[8, 8, 2, 2]}
                             maxBarSize={36}
                           />
 
                           <Bar
                             dataKey="reimbursableInvoices"
                             name={tr("Reimbursable invoices")}
-                            fill="#b0a5c2"
-                            radius={[4, 4, 0, 0]}
+                            fill="#8b83b9"
+                            radius={[8, 8, 2, 2]}
                             maxBarSize={36}
                           />
 
                           <Bar
                             dataKey="netResult"
                             name={tr("Gross margin")}
-                            fill="#9b8a78"
-                            radius={[4, 4, 0, 0]}
+                            fill="#426b91"
+                            radius={[8, 8, 2, 2]}
                             maxBarSize={36}
                           />
                         </BarChart>
@@ -4098,7 +4230,7 @@ export default function App() {
                   </p>
                 </div>
 
-                <AddRecord page={activePage}/>
+                <AddRecord page={activePage}/>{activePage==="departments"&&<AddRecord page="departmentCosts"/>}{activePage==="employees"&&<AddRecord page="ika"/>}
               </div>
 
               <section className="panel table-panel">
@@ -4288,7 +4420,7 @@ export default function App() {
                   </p>
                 </div>
 
-                <AddRecord page={activePage}/>
+                <AddRecord page={activePage}/>{activePage==="departments"&&<AddRecord page="departmentCosts"/>}{activePage==="employees"&&<AddRecord page="ika"/>}
               </div>
 
               <section className="panel table-panel">
@@ -4530,7 +4662,7 @@ export default function App() {
                   <p className="muted">{tr(currentPage.subtitle)}</p>
                 </div>
 
-                <AddRecord page={activePage}/>
+                <AddRecord page={activePage}/>{activePage==="departments"&&<AddRecord page="departmentCosts"/>}{activePage==="employees"&&<AddRecord page="ika"/>}
               </div>
 
               {activePage === "workEntries" ? (
@@ -4547,7 +4679,7 @@ export default function App() {
               </p>
             </section>
           )}
-        </div>
+        </div></EntryContext.Provider>
       </main>
     </div>
   );

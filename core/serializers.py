@@ -461,3 +461,17 @@ class IKASerializer(serializers.ModelSerializer):
     def get_accrued_cost(self, obj):
         from .services import ika_accrued_cost
         return str(ika_accrued_cost(obj))
+
+from .models import IKAPackage
+
+class IKACreateSerializer(serializers.ModelSerializer):
+    package = serializers.PrimaryKeyRelatedField(queryset=IKAPackage.objects.filter(is_active=True))
+
+    class Meta:
+        model = IKA
+        fields = ("id", "employee", "package", "start_date", "notes", "package_name", "monthly_cost")
+        read_only_fields = ("package_name", "monthly_cost")
+
+    def create(self, validated_data):
+        package = validated_data["package"]
+        return IKA.objects.create(**validated_data, package_name=package.name, monthly_cost=package.monthly_cost)

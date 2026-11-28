@@ -5,7 +5,7 @@ from django.db.models.deletion import ProtectedError
 from rest_framework.exceptions import ValidationError as APIValidationError
 
 # Create your views here.
-from rest_framework import viewsets
+from rest_framework import viewsets, mixins
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.decorators import action
 
@@ -166,6 +166,21 @@ from rest_framework import status
 
 
 class WorkEntryViewSet(BaseModelViewSet):
+    @action(detail=False, methods=["post"])
+    def batch(self, request):
+        from .signals import batch_financial_refresh
+        if not isinstance(request.data, list) or not 1 <= len(request.data) <= 50:
+            raise APIValidationError("Submit between 1 and 50 work entries.")
+        serializer = self.get_serializer(data=request.data, many=True)
+        serializer.is_valid(raise_exception=True)
+        try:
+            with batch_financial_refresh():
+                serializer.save()
+        except ModelValidationError as exc:
+            raise APIValidationError(getattr(exc, "message_dict", exc.messages))
+        return Response(serializer.data, status=201)
+
+
     queryset = WorkEntry.objects.select_related(
         "employee",
         "house",
@@ -233,13 +248,23 @@ from .serializers import (
 )
 
 
-class SupplierViewSet(viewsets.ReadOnlyModelViewSet):
+class SupplierViewSet(mixins.CreateModelMixin, viewsets.ReadOnlyModelViewSet):
     queryset = Supplier.objects.all().order_by("name")
     serializer_class = SupplierSerializer
     permission_classes = [IsAuthenticated]
 
 
-class SupplierPaymentViewSet(viewsets.ReadOnlyModelViewSet):
+class SupplierPaymentViewSet(mixins.CreateModelMixin, viewsets.ReadOnlyModelViewSet):
+    def perform_create(self, serializer):
+        if not self.request.user.has_perm("core.add_supplierpayment"):
+            from rest_framework.exceptions import PermissionDenied
+            raise PermissionDenied("You do not have permission to add payments.")
+        try:
+            with transaction.atomic():
+                serializer.save()
+        except ModelValidationError as exc:
+            raise APIValidationError(getattr(exc, "message_dict", exc.messages))
+
     queryset = (
         SupplierPayment.objects
         .select_related("supplier", "invoice")
@@ -253,7 +278,17 @@ class SupplierPaymentViewSet(viewsets.ReadOnlyModelViewSet):
     ordering_fields = ["payment_date", "amount"]
 
 
-class CustomerPaymentViewSet(viewsets.ReadOnlyModelViewSet):
+class CustomerPaymentViewSet(mixins.CreateModelMixin, viewsets.ReadOnlyModelViewSet):
+    def perform_create(self, serializer):
+        if not self.request.user.has_perm("core.add_customerpayment"):
+            from rest_framework.exceptions import PermissionDenied
+            raise PermissionDenied("You do not have permission to add payments.")
+        try:
+            with transaction.atomic():
+                serializer.save()
+        except ModelValidationError as exc:
+            raise APIValidationError(getattr(exc, "message_dict", exc.messages))
+
     queryset = (
         CustomerPayment.objects
         .select_related("customer", "invoice")
@@ -575,7 +610,7 @@ from .models import Company_Gas
 from .serializers import CompanyGasSerializer
 
 
-class CompanyGasViewSet(viewsets.ReadOnlyModelViewSet):
+class CompanyGasViewSet(mixins.CreateModelMixin, viewsets.ReadOnlyModelViewSet):
 
     serializer_class = CompanyGasSerializer
 
@@ -643,8 +678,28 @@ from .models import IKA
 from .serializers import IKASerializer
 from rest_framework.permissions import IsAdminUser
 
-class IKAViewSet(viewsets.ReadOnlyModelViewSet):
+class IKAViewSet(mixins.CreateModelMixin, viewsets.ReadOnlyModelViewSet):
     permission_classes = [IsAdminUser]
     queryset = IKA.objects.all()
     serializer_class = IKASerializer
 
+
+    @action(detail=False, methods=["get"])
+    def packages(self, request):
+        from .models import IKAPackage
+        return Response(list(IKAPackage.objects.filter(is_active=True).order_by("name").values("id", "name", "monthly_cost")))
+
+    def get_serializer_class(self):
+        if self.action == "create":
+            from .serializers import IKACreateSerializer
+            return IKACreateSerializer
+        return IKASerializer
+
+    def perform_create(self, serializer):
+        try:
+            with transaction.atomic():
+                employee = serializer.validated_data["employee"]
+                Employee.objects.select_for_update().get(pk=employee.pk)
+                serializer.save()
+        except ModelValidationError as exc:
+            raise APIValidationError(getattr(exc, "message_dict", exc.messages))

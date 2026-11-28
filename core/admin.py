@@ -1084,6 +1084,7 @@ class SupplierPaymentAdmin(admin.ModelAdmin):
         "amount",
         "invoice",
         "reference",
+        "has_receipt",
     )
 
     list_filter = (
@@ -1104,6 +1105,10 @@ class SupplierPaymentAdmin(admin.ModelAdmin):
     ordering = ("-payment_date", "-id")
 
 
+
+    @admin.display(boolean=True, description="Receipt")
+    def has_receipt(self, obj):
+        return bool(obj.receipt)
 
     def formfield_for_foreignkey(self, db_field, request, **kwargs):
         if db_field.name == "invoice":
